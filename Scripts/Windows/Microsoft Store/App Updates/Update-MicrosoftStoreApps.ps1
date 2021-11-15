@@ -177,8 +177,12 @@ Else
 End If
 "@;
 
+    # Delete file.
+    Remove-Item -Path $OutputPath -Force -Confirm:$false;
+
     # Export to file.
-    $Content | Out-File -FilePath $OutputPath -Encoding utf8 -Force;
+    $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False;
+    [System.IO.File]::WriteAllLines($OutputPath, $Content, $Utf8NoBomEncoding);
 }
 
 # Create PowerShell file with content.
@@ -196,8 +200,12 @@ Function New-Ps1Script
 Get-CimInstance -Namespace "root\cimv2\mdm\dmmap" -ClassName "MDM_EnterpriseModernAppManagement_AppManagement01" | Invoke-CimMethod -MethodName "UpdateScanMethod";
 "@;
 
+    # Delete file.
+    Remove-Item -Path $OutputPath -Force -Confirm:$false;
+
     # Export to file.
-    $Content | Out-File -FilePath $OutputPath -Encoding utf8 -Force;
+    $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False;
+    [System.IO.File]::WriteAllLines($OutputPath, $Content, $Utf8NoBomEncoding);
 }
 
 ############### Functions - End ###############
