@@ -226,7 +226,7 @@ New-Ps1Script -OutputPath $Files.PS1;
 Write-Log ("Creating new schedule task called 'UpdateWinGetApps'");
 
 # Create new task schedule.
-New-ScriptTaskSchedule -FolderPath "\$OrganizationName" -Name "UpdateMicrosoftStoreApps" -Description 'Update WinGet apps' -Path 'C:\Windows\System32\wscript.exe' -Argument $Files.VBS;
+New-ScriptTaskSchedule -FolderPath "\$OrganizationName" -Name "UpdateWinGetApps" -Description 'Update WinGet apps' -Path 'C:\Windows\System32\wscript.exe' -Argument $Files.VBS;
 
 ############### Main - End ###############
 #endregion
