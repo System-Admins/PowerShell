@@ -5,7 +5,7 @@
   Forces an Microsoft Store app update when a user logon.
 
 .DESCRIPTION
-  Creates an task schedule that runs and PowerShell script through a VBS script (to hide the terminal).
+  Creates an task schedule that runs a PowerShell script through a VBS script (to hide the terminal).
   Needs to run in administrator context such as SYSTEM.
 
 .NOTES
