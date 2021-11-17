@@ -1,4 +1,5 @@
 #requires -version 3
+#requires -module powershell-yaml
 
 <#
 .SYNOPSIS
