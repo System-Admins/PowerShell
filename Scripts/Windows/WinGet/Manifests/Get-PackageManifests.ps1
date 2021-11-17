@@ -11,7 +11,7 @@
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  17-11-2021
+  Creation Date:  15-11-2021
   Purpose/Change: Initial script development.
 #>
 
@@ -28,8 +28,8 @@ Clear-Host;
 ############### Input - Start ###############
 
 # Search criteria.
-$AppId = "Google.Chrome";
-$AppVersion = ""; # specify version to get specific package
+$AppId = "Git.Git";
+$AppVersion = "2.34.0"; # specify version to get specific package, but not required.
 
 # Download folder.
 $PackageOutput = ("{0}\InstallerPackages" -f [Environment]::GetFolderPath("Desktop"));
@@ -189,16 +189,21 @@ Function Get-PackageManifests
             {
                 # Add to results.
                 $Results += [PSCustomObject]@{
-                    Installer = $ManifestObject;
+                    Manifest = "Installer";
+                    Identifier = $ManifestObject.PackageIdentifier;
+                    Version = $ManifestObject.PackageVersion;
+                    Data = $ManifestObject;
                 };
             }
             # Else if it's a locale.
             ElseIf($SearchResult | Where-Object {$_.path -like "*locale.*.yaml"})
             {
-                
                 # Add to results.
                 $Results += [PSCustomObject]@{
-                    Locale = @(
+                    Manifest = "Locale";
+                    Identifier = $ManifestObject.PackageIdentifier;
+                    Version = $ManifestObject.PackageVersion;
+                    Data = @(
                         [PSCustomObject]@{
                             ("{0}" -f $ManifestObject.PackageLocale) = $ManifestObject;
                         };
@@ -209,10 +214,12 @@ Function Get-PackageManifests
             # Else if it's a singleton.
             ElseIf($SearchResult | Where-Object {$_.path -like ("*{0}.yaml" -f $PackageId)})
             {
-                
                 # Add to results.
                 $Results += [PSCustomObject]@{
-                    Singleton = $ManifestObject;
+                    Manifest = "Singleton";
+                    Identifier = $ManifestObject.PackageIdentifier;
+                    Version = $ManifestObject.PackageVersion;
+                    Data = $ManifestObject;
                 };
                  
             }
@@ -280,13 +287,6 @@ $Manifests = Get-Manifests -Master $GitHubApi.Master -Manifest $GitHubApi.Manife
 
 # Get package manifests.
 $PackageManifests = Get-PackageManifests -Manifests $Manifests -PackageId $AppId -PackageVersion $AppVersion -GitHubApi $GitHubApi;
-
-# Foreach installer package url.
-Foreach($Installer in $PackageManifests.Installer.Installers)
-{
-    # Download package.
-    Download-PackageInstaller -Uri $Installer.InstallerUrl -OutputFolder $PackageOutput;
-}
 
 ############### Main - End ###############
 #endregion
