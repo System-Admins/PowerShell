@@ -256,13 +256,6 @@ Function Get-InstalledSoftwareAppx
 # Get installed software (64-bit) by searching in program files.
 Function Get-InstalledSoftwareProgramFiles64bit
 {
-    [cmdletbinding()]	
-		
-    Param
-    (
-        [Parameter(Mandatory=$true)][string]$Name
-    )
-
     # Object array.
     $SoftwareInstalled = @();
 
@@ -298,13 +291,6 @@ Function Get-InstalledSoftwareProgramFiles64bit
 # Get installed software (32-bit) by searching in program files.
 Function Get-InstalledSoftwareProgramFiles32bit
 {
-    [cmdletbinding()]	
-		
-    Param
-    (
-        [Parameter(Mandatory=$true)][string]$Name
-    )
-
     # Object array.
     $SoftwareInstalled = @();
 
@@ -365,13 +351,6 @@ Function Get-InstalledSoftwareProgramFiles32bit
 # Get installed software by searching in app data.
 Function Get-InstalledSoftwareAppData
 {
-    [cmdletbinding()]	
-		
-    Param
-    (
-        [Parameter(Mandatory=$true)][string]$Name
-    )
-
     # Object array.
     $SoftwareInstalled = @();
 
