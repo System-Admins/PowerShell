@@ -24,12 +24,6 @@
 #region begin input
 ############### Input - Start ###############
 
-# Package name.
-$Name = "Typora";
-
-# Package version.
-$Version = "0.11.17";
-
 ############### Input - End ###############
 #endregion
 
