@@ -8,7 +8,7 @@
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  22-11-2021
+  Creation Date:  15-11-2021
   Purpose/Change: Initial script development.
 #>
 
@@ -312,7 +312,7 @@ Function Get-InstalledSoftwareProgramFiles32bit
     If([Environment]::Is64BitProcess -eq $true)
     {
         # Search after files in 64-bit program files.
-        $SearchResults = Get-ChildItem -Path ${env:ProgramFiles(x86)} -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+        $SearchResults = Get-ChildItem -Path ${env:ProgramFiles(x86)} -Filter ("*.exe") -Recurse -ErrorAction SilentlyContinue;
 
         # Foreach search result.
         Foreach($SearchResult in $SearchResults)
@@ -337,7 +337,7 @@ Function Get-InstalledSoftwareProgramFiles32bit
     If([Environment]::Is64BitProcess -eq $false)
     {
         # Search after files in 64-bit program files.
-        $SearchResults = Get-ChildItem -Path $env:ProgramFiles -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+        $SearchResults = Get-ChildItem -Path $env:ProgramFiles -Filter ("*.exe") -Recurse -ErrorAction SilentlyContinue;
 
         # Foreach search result.
         Foreach($SearchResult in $SearchResults)
@@ -379,7 +379,7 @@ Function Get-InstalledSoftwareAppData
     If([Environment]::Is64BitProcess -eq $true)
     {
         # Search after files in 64-bit program files.
-        $SearchResults = Get-ChildItem -Path $env:APPDATA -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+        $SearchResults = Get-ChildItem -Path $env:APPDATA -Filter ("*.exe") -Recurse -ErrorAction SilentlyContinue;
 
         # Foreach search result.
         Foreach($SearchResult in $SearchResults)
@@ -404,77 +404,6 @@ Function Get-InstalledSoftwareAppData
     Return $SoftwareInstalled;
 }
 
-# Check install version against criteria.
-Function Check-InstalledSoftware
-{
-    [cmdletbinding()]	
-		
-    Param
-    (
-        [Parameter(Mandatory=$true)][string]$Name,
-        [Parameter(Mandatory=$true)]$Version,
-        [Parameter(Mandatory=$true)]$InstalledSoftware
-    )
-
-    # Set status.
-    $Status = "N/A";
-
-    # Check if software is installed already.
-    If($Installed = $InstalledSoftware | Where-Object {$_.Name -like "*$($Name)*"} | Sort-Object -Property Version -Descending)
-    {
-        # If multiple entries exist.
-        If($Installed.Count -gt 1)
-        {
-            # Check if exact version is installed
-            $Installed = $Installed | Where-Object {$_.Version -eq $Version} | Select-Object -First 1;
-        }
-
-        # Convert version.
-        If($Installed.Version)
-        {
-            # Convert to version type.
-            $InstalledVersion = [System.Version]::Parse(($Installed.Version -replace "([^0-9])", "."));
-        }
-        Else
-        {
-            # No version.
-            $InstalledVersion = "";
-        }
-
-        # If version is the same.
-        If($InstalledVersion -eq $Version)
-        {
-            # Set status.
-            $Status = "OK";
-        }
-        # If the installed version is newer.
-        ElseIf($InstalledVersion -gt $Version)
-        {
-            # Set status.
-            $Status = "Downgrade";
-        }
-        # If the installed version is older.
-        ElseIf($InstalledVersion -lt $Version)
-        {
-            # Set status.
-            $Status = "Upgrade";
-        }
-        Else
-        {
-            # Set status.
-            $Status = "N/A";
-        }
-    }
-    Else
-    {
-        # Set status.
-        $Status = "NotInstalled";
-    }
-
-    # Return
-    Return $Status;
-}
-
 ############### Functions - End ###############
 #endregion
 
@@ -486,15 +415,9 @@ $InstalledSoftware = @();
 $InstalledSoftware += (Get-InstalledSoftware32Bit);
 $InstalledSoftware += (Get-InstalledSoftware64Bit);
 $InstalledSoftware += (Get-InstalledSoftwareAppx);
-$InstalledSoftware += (Get-InstalledSoftwareProgramFiles64bit -Name $Name);
-$InstalledSoftware += (Get-InstalledSoftwareProgramFiles32bit -Name $Name);
-$InstalledSoftware += (Get-InstalledSoftwareAppData -Name $Name);
-
-# Convert to System.Version type.
-$Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
-
-# Chek installed software for criteria.
-Check-InstalledSoftware -Name $Name -Version $Version -InstalledSoftware $InstalledSoftware;
+$InstalledSoftware += (Get-InstalledSoftwareProgramFiles64bit);
+$InstalledSoftware += (Get-InstalledSoftwareProgramFiles32bit);
+$InstalledSoftware += (Get-InstalledSoftwareAppData);
 
 ############### Main - End ###############
 #endregion
