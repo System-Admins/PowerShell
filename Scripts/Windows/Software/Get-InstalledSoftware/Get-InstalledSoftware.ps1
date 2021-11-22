@@ -3,14 +3,12 @@
 <#
 .SYNOPSIS
   Get software installed in Windows.
-
 .DESCRIPTION
-  Goes through the registries (machine & user) and APPX packages to return a list.
-
+  Goes through the registries (machine & user), files and APPX packages to return a list.
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  15-11-2021
+  Creation Date:  22-11-2021
   Purpose/Change: Initial script development.
 #>
 
@@ -18,7 +16,7 @@
 ############### Bootstrap - Start ###############
 
 # Clear screen.
-Clear-Host;
+#Clear-Host;
 
 ############### Bootstrap - End ###############
 #endregion
@@ -26,7 +24,11 @@ Clear-Host;
 #region begin input
 ############### Input - Start ###############
 
+# Package name.
+$Name = "Typora";
 
+# Package version.
+$Version = "0.11.17";
 
 ############### Input - End ###############
 #endregion
@@ -34,14 +36,34 @@ Clear-Host;
 #region begin functions
 ############### Functions - Start ###############
 
-# Get installed software through registry and APPX.
-Function Get-InstalledSoftware
+# Write to the console.
+Function Write-Log
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$false)][string]$Text
+    )
+ 
+    # If the input is empty.
+    If([string]::IsNullOrEmpty($Text))
+    {
+        $Text = " ";
+    }
+    Else
+    {
+        # Write to the console.
+        Write-Host("[" + (Get-Date).ToString("dd/MM-yyyy HH:mm:ss") + "]: " + $Text);
+    }
+}
+
+# Get installed software (x64).
+Function Get-InstalledSoftware64Bit
 {
     # Registry paths.
     $MachineRegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
     $UserRegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
-    $MachineRegistryPath32Bit = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
-    $UserRegistryPath32Bit = "HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
 
     # Object array.
     $SoftwareInstalled = @();
@@ -49,11 +71,67 @@ Function Get-InstalledSoftware
     # If the process is 64-bit.
     If([Environment]::Is64BitProcess)
     {
-        # Set architecture.
-        $Architecture = "x64";
+        # Get registry keys for machine.
+        $RegistryKeys = Get-ChildItem -Path $MachineRegistryPath;
 
-        # Get registry keys.
-        $RegistryKeys = Get-ChildItem -Path $MachineRegistryPath32Bit;
+        # Foreach registry key.
+        Foreach($RegistryKey in $RegistryKeys)
+        {
+            # If the display name isnt empty.
+            If($RegistryKey.GetValue("DisplayName"))
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $RegistryKey.GetValue("DisplayName");
+                    Version = $RegistryKey.GetValue("DisplayVersion");
+                    Architecture = "x64";
+                    Scope = "machine";
+                    Source = "registry";
+                    Path = $RegistryKey;
+                };
+            }
+        }
+
+        # Get registry keys for user.
+        $RegistryKeys = Get-ChildItem -Path $UserRegistryPath -ErrorAction SilentlyContinue;
+
+        # Foreach registry key.
+        Foreach($RegistryKey in $RegistryKeys)
+        {
+            # If the display name isnt empty.
+            If($RegistryKey.GetValue("DisplayName"))
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $RegistryKey.GetValue("DisplayName");
+                    Version = $RegistryKey.GetValue("DisplayVersion");
+                    Architecture = "x64";
+                    Scope = "user";
+                    Source = "registry";
+                    Path = $RegistryKey;
+                };
+            }
+        }
+    }
+
+    # Return installed software.
+    Return $SoftwareInstalled;
+}
+
+# Get installed software (x86).
+Function Get-InstalledSoftware32Bit
+{
+    # Object array.
+    $SoftwareInstalled = @();
+
+    # If the process is 64-bit.
+    If([Environment]::Is64BitProcess -eq $true)
+    {
+        $MachineRegistryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+        $UserRegistryPath = "HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+
+        # Get registry keys for machine.
+        $RegistryKeys = Get-ChildItem -Path $MachineRegistryPath;
 
         # Foreach registry key.
         Foreach($RegistryKey in $RegistryKeys)
@@ -67,12 +145,14 @@ Function Get-InstalledSoftware
                     Version = $RegistryKey.GetValue("DisplayVersion");
                     Architecture = "x86";
                     Scope = "machine";
+                    Source = "registry";
+                    Path = $RegistryKey;
                 };
             }
         }
 
-        # Get registry keys.
-        $RegistryKeys = Get-ChildItem -Path $UserRegistryPath32Bit -ErrorAction SilentlyContinue;
+        # Get registry keys for user.
+        $RegistryKeys = Get-ChildItem -Path $UserRegistryPath -ErrorAction SilentlyContinue;
 
         # Foreach registry key.
         Foreach($RegistryKey in $RegistryKeys)
@@ -86,53 +166,71 @@ Function Get-InstalledSoftware
                     Version = $RegistryKey.GetValue("DisplayVersion");
                     Architecture = "x86";
                     Scope = "user";
+                    Source = "registry";
+                    Path = $RegistryKey;
                 };
             }
         }
     }
-    Else
+
+    # If the process is 32-bit.
+    If([Environment]::Is64BitProcess -eq $false)
     {
-        # Set architecture.
-        $Architecture = "x86";
+        $MachineRegistryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+        $UserRegistryPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+
+        # Get registry keys for machine.
+        $RegistryKeys = Get-ChildItem -Path $MachineRegistryPath;
+
+        # Foreach registry key.
+        Foreach($RegistryKey in $RegistryKeys)
+        {
+            # If the display name isnt empty.
+            If($RegistryKey.GetValue("DisplayName"))
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $RegistryKey.GetValue("DisplayName");
+                    Version = $RegistryKey.GetValue("DisplayVersion");
+                    Architecture = "x86";
+                    Scope = "machine";
+                    Source = "registry";
+                    Path = $RegistryKey;
+                };
+            }
+        }
+
+        # Get registry keys for user.
+        $RegistryKeys = Get-ChildItem -Path $UserRegistryPath -ErrorAction SilentlyContinue;
+
+        # Foreach registry key.
+        Foreach($RegistryKey in $RegistryKeys)
+        {
+            # If the display name isnt empty.
+            If($RegistryKey.GetValue("DisplayName"))
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $RegistryKey.GetValue("DisplayName");
+                    Version = $RegistryKey.GetValue("DisplayVersion");
+                    Architecture = "x86";
+                    Scope = "user";
+                    Source = "registry";
+                    Path = $RegistryKey;
+                };
+            }
+        }
     }
 
-    # Get registry keys.
-    $RegistryKeys = Get-ChildItem -Path $MachineRegistryPath;
+    # Return installed software.
+    Return $SoftwareInstalled;
+}
 
-    # Foreach registry key.
-    Foreach($RegistryKey in $RegistryKeys)
-    {
-        # If the display name isnt empty.
-        If($RegistryKey.GetValue("DisplayName"))
-        {
-            # Add to object array.
-            $SoftwareInstalled += [PSCustomObject]@{
-                Name = $RegistryKey.GetValue("DisplayName");
-                Version = $RegistryKey.GetValue("DisplayVersion");
-                Architecture = $Architecture;
-                Scope = "machine";
-            };
-        }
-    }    
-    
-    # Get registry keys.
-    $RegistryKeys = Get-ChildItem -Path $UserRegistryPath -ErrorAction SilentlyContinue;
-
-    # Foreach registry key.
-    Foreach($RegistryKey in $RegistryKeys)
-    {
-        # If the display name isnt empty.
-        If($RegistryKey.GetValue("DisplayName"))
-        {
-            # Add to object array.
-            $SoftwareInstalled += [PSCustomObject]@{
-                Name = $RegistryKey.GetValue("DisplayName");
-                Version = $RegistryKey.GetValue("DisplayVersion");
-                Architecture = $Architecture;
-                Scope = "user";
-            };
-        }
-    }
+# Get installed software (AppX).
+Function Get-InstalledSoftwareAppx
+{
+    # Object array.
+    $SoftwareInstalled = @();
 
     # Get APPX packages
     $AppxPackages = Get-AppxPackage;
@@ -146,11 +244,235 @@ Function Get-InstalledSoftware
             Version = $AppxPackage.Version;
             Architecture = $AppxPackage.Architecture;
             Scope = "user";
+            Source = "Appx";
+            Path = $AppxPackage.InstallLocation;
         };
     }
 
-    # Return results.
+    # Return installed software.
     Return $SoftwareInstalled;
+}
+
+# Get installed software (64-bit) by searching in program files.
+Function Get-InstalledSoftwareProgramFiles64bit
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)][string]$Name
+    )
+
+    # Object array.
+    $SoftwareInstalled = @();
+
+    # If the process is 64-bit.
+    If([Environment]::Is64BitProcess -eq $true)
+    {
+        # Search after files in 64-bit program files.
+        $SearchResults = Get-ChildItem -Path $env:ProgramFiles -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+
+        # Foreach search result.
+        Foreach($SearchResult in $SearchResults)
+        {
+            # If the display name isnt empty.
+            If($SearchResult.VersionInfo.ProductName)
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $SearchResult.VersionInfo.ProductName;
+                    Version = $SearchResult.VersionInfo.ProductVersion;
+                    Architecture = "x64";
+                    Scope = "machine";
+                    Source = "Files";
+                    Path = $SearchResult.FullName;
+                };
+            }
+        }
+    }
+
+    # Return installed software.
+    Return $SoftwareInstalled;
+}
+
+# Get installed software (32-bit) by searching in program files.
+Function Get-InstalledSoftwareProgramFiles32bit
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)][string]$Name
+    )
+
+    # Object array.
+    $SoftwareInstalled = @();
+
+    # If the process is 64-bit.
+    If([Environment]::Is64BitProcess -eq $true)
+    {
+        # Search after files in 64-bit program files.
+        $SearchResults = Get-ChildItem -Path ${env:ProgramFiles(x86)} -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+
+        # Foreach search result.
+        Foreach($SearchResult in $SearchResults)
+        {
+            # If the display name isnt empty.
+            If($SearchResult.VersionInfo.ProductName)
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $SearchResult.VersionInfo.ProductName;
+                    Version = $SearchResult.VersionInfo.ProductVersion;
+                    Architecture = "x86";
+                    Scope = "machine";
+                    Source = "Files";
+                    Path = $SearchResult.FullName;
+                };
+            }
+        }
+    }
+
+    # If the process is 32-bit.
+    If([Environment]::Is64BitProcess -eq $false)
+    {
+        # Search after files in 64-bit program files.
+        $SearchResults = Get-ChildItem -Path $env:ProgramFiles -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+
+        # Foreach search result.
+        Foreach($SearchResult in $SearchResults)
+        {
+            # If the display name isnt empty.
+            If($SearchResult.VersionInfo.ProductName)
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $SearchResult.VersionInfo.InternalName;
+                    Version = $SearchResult.VersionInfo.ProductVersion;
+                    Architecture = "x86";
+                    Scope = "machine";
+                    Source = "Files";
+                    Path = $SearchResult.FullName;
+                };
+            }
+        }
+    }
+
+    # Return installed software.
+    Return $SoftwareInstalled;
+}
+
+# Get installed software by searching in app data.
+Function Get-InstalledSoftwareAppData
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)][string]$Name
+    )
+
+    # Object array.
+    $SoftwareInstalled = @();
+
+    # If the process is 64-bit.
+    If([Environment]::Is64BitProcess -eq $true)
+    {
+        # Search after files in 64-bit program files.
+        $SearchResults = Get-ChildItem -Path $env:APPDATA -Filter ("*{0}*.exe" -f $Name) -Recurse -ErrorAction SilentlyContinue;
+
+        # Foreach search result.
+        Foreach($SearchResult in $SearchResults)
+        {
+            # If the display name isnt empty.
+            If($SearchResult.VersionInfo.ProductName)
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $SearchResult.VersionInfo.ProductName;
+                    Version = $SearchResult.VersionInfo.ProductVersion;
+                    Architecture = "x64";
+                    Scope = "machine";
+                    Source = "Files";
+                    Path = $SearchResult.FullName;
+                };
+            }
+        }
+    }
+
+    # Return installed software.
+    Return $SoftwareInstalled;
+}
+
+# Check install version against criteria.
+Function Check-InstalledSoftware
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)]$Version,
+        [Parameter(Mandatory=$true)]$InstalledSoftware
+    )
+
+    # Set status.
+    $Status = "N/A";
+
+    # Check if software is installed already.
+    If($Installed = $InstalledSoftware | Where-Object {$_.Name -like "*$($Name)*"} | Sort-Object -Property Version -Descending)
+    {
+        # If multiple entries exist.
+        If($Installed.Count -gt 1)
+        {
+            # Check if exact version is installed
+            $Installed = $Installed | Where-Object {$_.Version -eq $Version} | Select-Object -First 1;
+        }
+
+        # Convert version.
+        If($Installed.Version)
+        {
+            # Convert to version type.
+            $InstalledVersion = [System.Version]::Parse(($Installed.Version -replace "([^0-9])", "."));
+        }
+        Else
+        {
+            # No version.
+            $InstalledVersion = "";
+        }
+
+        # If version is the same.
+        If($InstalledVersion -eq $Version)
+        {
+            # Set status.
+            $Status = "OK";
+        }
+        # If the installed version is newer.
+        ElseIf($InstalledVersion -gt $Version)
+        {
+            # Set status.
+            $Status = "Downgrade";
+        }
+        # If the installed version is older.
+        ElseIf($InstalledVersion -lt $Version)
+        {
+            # Set status.
+            $Status = "Upgrade";
+        }
+        Else
+        {
+            # Set status.
+            $Status = "N/A";
+        }
+    }
+    Else
+    {
+        # Set status.
+        $Status = "NotInstalled";
+    }
+
+    # Return
+    Return $Status;
 }
 
 ############### Functions - End ###############
@@ -159,8 +481,20 @@ Function Get-InstalledSoftware
 #region begin main
 ############### Main - Start ###############
 
-# Return all installed software.
-$InstalledSoftware = Get-InstalledSoftware;
+# Get installed software.
+$InstalledSoftware = @();
+$InstalledSoftware += (Get-InstalledSoftware32Bit);
+$InstalledSoftware += (Get-InstalledSoftware64Bit);
+$InstalledSoftware += (Get-InstalledSoftwareAppx);
+$InstalledSoftware += (Get-InstalledSoftwareProgramFiles64bit -Name $Name);
+$InstalledSoftware += (Get-InstalledSoftwareProgramFiles32bit -Name $Name);
+$InstalledSoftware += (Get-InstalledSoftwareAppData -Name $Name);
+
+# Convert to System.Version type.
+$Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
+
+# Chek installed software for criteria.
+Check-InstalledSoftware -Name $Name -Version $Version -InstalledSoftware $InstalledSoftware;
 
 ############### Main - End ###############
 #endregion
