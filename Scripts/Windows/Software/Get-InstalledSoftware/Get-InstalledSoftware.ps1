@@ -398,6 +398,9 @@ $InstalledSoftware += (Get-InstalledSoftwareProgramFiles64bit);
 $InstalledSoftware += (Get-InstalledSoftwareProgramFiles32bit);
 $InstalledSoftware += (Get-InstalledSoftwareAppData);
 
+# Return results.
+Return $InstalledSoftware;
+
 ############### Main - End ###############
 #endregion
 
