@@ -25,10 +25,10 @@
 ############### Input - Start ###############
 
 # Package name.
-$Name = "Typora";
+$Name = "Sublime";
 
 # Package version.
-$Version = "0.11.17";
+$Version = "";
 
 # If the script is used for detection or requirement for Intune apps.
 $IntnueMethod = "Detection";
@@ -563,8 +563,12 @@ If(Check-SystemContext)
     $InstalledSoftware += (Get-InstalledSoftwareLoggedConsoleUser);
 }
 
-# Convert to System.Version type.
-$Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
+# If version is set.
+If($Version)
+{
+    # Convert to System.Version type.
+    $Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
+}
 
 # Chek installed software for criteria.
 $Response = Check-InstalledSoftware -Name $Name -Version $Version -InstalledSoftware $InstalledSoftware;
