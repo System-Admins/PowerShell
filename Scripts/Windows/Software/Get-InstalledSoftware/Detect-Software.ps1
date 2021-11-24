@@ -8,7 +8,7 @@
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  24-11-2021
+  Creation Date:  15-11-2021
   Purpose/Change: Initial script development.
 #>
 
@@ -25,10 +25,13 @@
 ############### Input - Start ###############
 
 # Package name.
-$Name = "TortoiseGit";
+$Name = "Typora";
 
 # Package version.
-$Version = "2.12.0.0";
+$Version = "0.11.17";
+
+# If the script is used for detection or requirement for Intune apps.
+$IntnueMethod = "Detection";
 
 ############### Input - End ###############
 #endregion
@@ -419,24 +422,34 @@ Function Get-InstalledSoftwareLoggedConsoleUser
     # Set user registry
     $RegistryPath = ('HKU:\{0}\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' -f $LoggedOnConsoleUserSID);
 
-    # Get registry keys for machine.
-    $RegistryKeys = Get-ChildItem -Path $RegistryPath;
+    # Remove HKU drive.
+    Remove-PSDrive -Name "HKU" -Force -Confirm:$false  -ErrorAction SilentlyContinue;
 
-    # Foreach registry key.
-    Foreach($RegistryKey in $RegistryKeys)
+    # Create new HKU drive.
+    New-PSDrive -PSProvider Registry -Root HKEY_USERS -Name "HKU" -Confirm:$false;
+
+    # Check if registry path exist.
+    If(Test-Path -Path $RegistryPath)
     {
-        # If the display name isnt empty.
-        If($RegistryKey.GetValue("DisplayName"))
+        # Get registry keys for machine.
+        $RegistryKeys = Get-ChildItem -Path $RegistryPath;
+
+        # Foreach registry key.
+        Foreach($RegistryKey in $RegistryKeys)
         {
-            # Add to object array.
-            $SoftwareInstalled += [PSCustomObject]@{
-                Name = $RegistryKey.GetValue("DisplayName");
-                Version = $RegistryKey.GetValue("DisplayVersion");
-                Architecture = "x64";
-                Scope = "machine";
-                Source = "registry";
-                Path = $RegistryKey;
-            };
+            # If the display name isnt empty.
+            If($RegistryKey.GetValue("DisplayName"))
+            {
+                # Add to object array.
+                $SoftwareInstalled += [PSCustomObject]@{
+                    Name = $RegistryKey.GetValue("DisplayName");
+                    Version = $RegistryKey.GetValue("DisplayVersion");
+                    Architecture = "x64";
+                    Scope = "machine";
+                    Source = "registry";
+                    Path = $RegistryKey;
+                };
+            }
         }
     }
 
@@ -565,10 +578,15 @@ If($Response -eq "SameVersion" -or $Response -eq "Downgrade")
     # Exit.
     Return 0;
 }
-Else
+# If needs to be updated.
+ElseIf($Response -eq "Upgrade")
 {
-    # Return response.
-    Return $Response;
+    # If Intune method is "Requirement".
+    If($IntnueMethod -eq "Requirement")
+    {
+        # Exit.
+        Return $Response;
+    }
 }
 
 ############### Main - End ###############
