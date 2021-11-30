@@ -24,3 +24,24 @@ Major  Minor  Build  Revision
 4      3      0      3       
 ```
 
+## Paths
+
+### Get script path
+
+This returns the executed script path. Takes into account if the scripts runs in PowerShell ISE IDE.
+
+```powershell
+# If script running in PowerSHell ISE.
+If($psise)
+{
+    # Set script path.
+    $ScriptPath = Split-Path $psise.CurrentFile.FullPath;
+}
+# Normal PowerShell session.
+Else
+{
+    # Set script path.
+    $ScriptPath = $global:PSScriptRoot;
+}   
+```
+
