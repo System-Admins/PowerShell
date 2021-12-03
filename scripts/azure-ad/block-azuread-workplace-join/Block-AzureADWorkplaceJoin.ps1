@@ -1,4 +1,4 @@
-﻿#Setting registry key to block AAD Registration to 3rd party tenants. 
+﻿# Setting registry key to block AAD Registration to 3rd party tenants. 
 $RegistryLocation = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WorkplaceJoin\";
 $keyname = "BlockAADWorkplaceJoin";
 
