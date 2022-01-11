@@ -3,10 +3,10 @@
 
 <#
 .SYNOPSIS
-  .
+  Get members of nested groups and adds them to the root level group.
 
 .DESCRIPTION
-  .
+  Takes an backup of current members in groups, get nested members and adds them to the root group.
 
 .NOTES
   Version:        1.0
