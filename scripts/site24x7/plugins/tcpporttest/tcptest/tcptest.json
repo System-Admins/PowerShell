@@ -1,0 +1,10 @@
+{
+  "dr.dk_80": {
+    "destination": "dr.dk",
+    "port": "80"
+  },
+  "dr.dk_443": {
+    "destination": "dr.dk",
+    "port": "443"
+  }
+}
