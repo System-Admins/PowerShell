@@ -88,6 +88,34 @@ Foreach($Property in $TheObject | Get-Member)
 
 
 
+## Processor
+
+### Check if process is 32 or 64-bit
+
+Return 32 or 64 depending on the running process arcitechture.
+
+```powershell
+# Get if process is x86 or x64.
+Function Get-ProcessArchType
+{
+    if([IntPtr]::Size -eq 4)
+    {
+        # Return x86.
+        return 32;
+    }
+    else
+    {
+        # Return x64.
+        return 64;
+    }
+}
+
+# Get processor architecture.
+Get-ProcessArchType;
+```
+
+
+
 ## File Handling
 
 ### Find and replace text in a file
