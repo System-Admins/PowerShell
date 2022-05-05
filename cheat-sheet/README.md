@@ -53,7 +53,13 @@ Else
 }   
 ```
 
+### Get desktop path
 
+This returns the desktop path for the current user.
+
+```powershell
+[Environment]::GetFolderPath("Desktop");
+```
 
 ## Network Policy Server (NPS)
 
