@@ -32,7 +32,7 @@ Foreach($Item in $Items)
                     "Identity" = $Access.IdentityReference;
                     "Permission" = $Access.FileSystemRights;
                     "IsInherited" = $Access.IsInherited;
-                    "LastModifiedTime" = $Item.LastModifiedTime;
+                    "CreationTime" = $Item.CreationTime;
                     "LastAccessTime" = $Item.LastAccessTime;
                     "LastWriteTime" = $Item.LastWriteTime;
                 } | Export-Csv -Path $CSVFilePath -Encoding UTF8 -NoTypeInformation -Append -Delimiter ";" -Force;
@@ -73,7 +73,7 @@ Foreach($Item in $Items)
                             "Identity" = $Access.IdentityReference;
                             "Permission" = $Access.FileSystemRights;
                             "IsInherited" = $Access.IsInherited;
-                            "LastModifiedTime" = $SubItem.LastModifiedTime;
+                            "CreationTime" = $SubItem.CreationTime;
                             "LastAccessTime" = $SubItem.LastAccessTime;
                             "LastWriteTime" = $SubItem.LastWriteTime;
                         } | Export-Csv -Path $CSVFilePath -Encoding UTF8 -NoTypeInformation -Append -Delimiter ";" -Force;
