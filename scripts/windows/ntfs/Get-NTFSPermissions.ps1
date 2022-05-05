@@ -2,7 +2,7 @@
 $CSVFilePath = ("{0}\WeibelNTFSReport.csv" -f [Environment]::GetFolderPath("Desktop"));
 
 # Get root items.
-$Items = Get-ChildItem -Path "\\weibel.dk\files";
+$Items = Get-ChildItem -Path "\\server\share";
 
 # Max parrallel threads.
 $MaxThreads = 8;
