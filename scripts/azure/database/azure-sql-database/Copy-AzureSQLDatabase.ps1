@@ -1,15 +1,8 @@
 # Must be running PowerShell version 5.1.
 #Requires -Version 5.1;
 
-# Must have the following modules installed.
-#Requires -Module Az.Sql;
-
 # Make sure that you have the following dll (x64) installed:
 #https://www.microsoft.com/en-us/download/confirmation.aspx?id=48742
-
-# Also make sure that you have installed the following modules:
-#Install-Module -Name Az.Accounts -SkipPublisherCheck -Force -Scope CurrentUser;
-#Install-Module -Name Az.Sql -SkipPublisherCheck -Force -Scope CurrentUser;
 
 <#
 .SYNOPSIS
@@ -27,10 +20,6 @@
 
 #region begin boostrap
 ############### Bootstrap - Start ###############
-
-# Import module(s).
-Import-Module -Name Az.Sql -Force -DisableNameChecking;
-Import-Module -Name Az.Accounts -Force -DisableNameChecking;
 
 ############### Bootstrap - End ###############
 #endregion
