@@ -1,8 +1,14 @@
 # Must be running PowerShell version 5.1.
 #Requires -Version 5.1;
 
+# Must have the following modules installed.
+#Requires -Module Az.Accounts;
+
 # Make sure that you have the following dll (x64) installed:
 #https://www.microsoft.com/en-us/download/confirmation.aspx?id=48742
+
+# Also make sure that you have installed the following modules:
+#Install-Module -Name Az.Accounts -SkipPublisherCheck -Force -Scope CurrentUser;
 
 <#
 .SYNOPSIS
@@ -12,53 +18,56 @@
   .
 
 .NOTES
-  Version:        1.0
+  Version:        1.1
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  12-05-2022
+  Creation Date:  19-05-2022
   Purpose/Change: Initial script development
 #>
 
 #region begin boostrap
 ############### Bootstrap - Start ###############
 
+# Parameters.
+Param
+(
+    # Source - Username and password for the Azure SQL Server.
+    [Parameter(Mandatory=$false)][string]$SourceUsername,
+    [Parameter(Mandatory=$false)][securestring]$SourcePassword,
+
+    # Source - Login type to user (AAD or SQL).
+    [Parameter(Mandatory=$false)][ValidateSet("AADPassword", "SQLUser", "AadContext")][string]$SourceLoginType = 'AadContext', #or SQLUser / AadContext
+
+    # Source - Server where the source database is stored.
+    [Parameter(Mandatory=$true)][string]$SourceDbServer,
+
+    # Source - Database to copy from.
+    [Parameter(Mandatory=$true)][string]$SourceDbName,
+
+    # Target - Username and password for the Azure SQL Server.
+    [Parameter(Mandatory=$false)][string]$TargetUsername,
+    [Parameter(Mandatory=$false)][securestring]$TargetPassword,
+
+    # Target - Login type to user (AAD or SQL).
+    [Parameter(Mandatory=$false)][ValidateSet("AADPassword", "SQLUser", "AadContext")][string]$TargetLoginType = 'AadContext', #or SQLUser / AadContext
+
+    # Target - Server where the target database will be stored.
+    [Parameter(Mandatory=$true)][string]$TargetDbServer,
+
+    # Target - The database that will be created in the target with a copy.
+    [Parameter(Mandatory=$true)][string]$TargetDbName
+)
+
+# Clear host.
+#Clear-Host;
+
+# Import module(s).
+Import-Module -Name Az.Accounts -Force -DisableNameChecking;
+
 ############### Bootstrap - End ###############
 #endregion
 
 #region begin input
 ############### Input - Start ###############
-
-# Source - Username and password for the Azure SQL Server.
-[string]$SourceUsername = '<Azure AD user>';
-[securestring]$SourcePassword = ('<password here>' | ConvertTo-SecureString -AsPlainText -Force);
-
-# Source - Login type to user (AAD or SQL).
-[string]$SourceLoginType = 'AADPassword'; #or SQLUser
-
-# Source - Server where the source database is stored.
-[string]$SourceDbServer = '<source servername>.database.windows.net';
-
-# Source - Database to copy from.
-[string]$SourceDbName = '<database name of source>';
-
-# Target - Username and password for the Azure SQL Server.
-[string]$TargetUsername = '<Azure AD user>';
-[securestring]$TargetPassword = ('<password here>' | ConvertTo-SecureString -AsPlainText -Force);
-
-# Target - Login type to user (AAD or SQL).
-[string]$TargetLoginType = 'AADPassword'; #or SQLUser
-
-# Target - Server where the target database will be stored.
-[string]$TargetDbServer = '<target server name>.database.windows.net';
-
-# Target - The database that will be created in the target with a copy.
-[string]$TargetDbName = '<new database name here>';
-
-# Target - If the target server is member of a pool.
-[string]$TargetElasticPoolName = '<elastic pool name>'; # Can also be empty if none.
-
-# Name and password of the user which will be created to do the copy (it will be created).
-[string]$SqlUsername = '<sql user to be created>';
-[securestring]$SqlPassword = ('<password here>' | ConvertTo-SecureString -AsPlainText -Force);
 
 ############### Input - End ###############
 #endregion
@@ -80,12 +89,12 @@ Function Write-Log
     If([string]::IsNullOrEmpty($Text))
     {
         # Write to the console.
-        Write-Output("");
+        Write-Host("");
     }
     Else
     {
         # Write to the console.
-        Write-Output("[{0}]: {1}" -f (Get-Date).ToString("dd/MM-yyyy HH:mm:ss"), $Text);
+        Write-Host("[{0}]: {1}" -f (Get-Date).ToString("dd/MM-yyyy HH:mm:ss"), $Text);
     }
 }
 
@@ -114,7 +123,7 @@ Function Invoke-SqlQuery
     param
     (
         # Connection string to the database.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Query to invoke.
         [Parameter(Mandatory=$true)][string]$Query
@@ -124,14 +133,23 @@ Function Invoke-SqlQuery
     #Write-Log -Text ("Executing query:");
     #Write-Log -Text ($Query);
 
-    # Connect to database.
+    # Create object with connection string.
     $DatabaseConnection = New-Object System.Data.SqlClient.SqlConnection;
-    $DatabaseConnection.ConnectionString = $ConnectionString;
+    $DatabaseConnection.ConnectionString = $ConnectionString.ConnectionString;
+
+    # If token is specificed.
+    If($ConnectionString.AccessToken)
+    {
+        # Add the token.
+        $DatabaseConnection.AccessToken = $ConnectionString.AccessToken;
+    }
+
+    # Connect to database.
     $DatabaseConnection.Open();
 
     # Construct command.
     $DatabaseQuery = New-Object System.Data.SqlClient.SqlCommand;
-    $DatabaseQuery.Connection = $DatabaseConnection;
+    $DatabaseQuery.Connection = $ConnectionString;
     $DatabaseQuery.CommandText = $Query;
     $DatabaseQuery.CommandTimeout = 0;;
 
@@ -148,6 +166,22 @@ Function Invoke-SqlQuery
     Return $Dataset.Tables;
 }
 
+# Get Azure access token.
+Function Get-AzureSqlToken
+{
+    # Resource URL.
+    $DbResourceUrl = 'https://database.windows.net/';
+
+    # Get the access token.
+    $AccessToken = Get-AzAccessToken -ResourceUrl $dbResourceUrl;
+
+    # Extract the token.
+    [string]$Token = $accessToken.Token;
+
+    # Return token.
+    Return $Token;
+}
+
 # Construct SQL connection string.
 Function Get-SqlConnectionString
 {
@@ -161,16 +195,16 @@ Function Get-SqlConnectionString
         [Parameter(Mandatory=$false)][int]$Port = 1433,
 
         # Server port.
-        [Parameter(Mandatory=$false)][string]$Database,
+        [Parameter(Mandatory=$false)][string]$Database = "master",
 
         # Username.
-        [Parameter(Mandatory=$true)][string]$Username,
+        [Parameter(Mandatory=$false)][string]$Username,
 
         # Password.
-        [Parameter(Mandatory=$true)][securestring]$Password,
+        [Parameter(Mandatory=$false)][securestring]$Password,
 
         # Connection type.
-        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser")][string]$LoginType
+        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser", "AadContext")][string]$LoginType
     )
 
     # If the password is set.
@@ -183,25 +217,64 @@ Function Get-SqlConnectionString
     # If the login type is "Azure Active Directory - Passsword".
     If($LoginType -eq "AADPassword")
     {
+        # Write to log.
+        Write-Log ("Using Azure AD password login for server '{0}' for data '{1}'" -f $Server, $Database);
+
         # Get basic connection string.
         [string]$ConnectionString = ('Server=tcp:{0},{1};Persist Security Info=False;Authentication=Active Directory Password;User ID={2};Password={3};MultipleActiveResultSets=False;Encrypt=False;TrustServerCertificate=True;;' -f $Server, $Port, $Username, $UnsecurePassword);
     }
     # Else if the login type is "SQL Server Authentication".
     ElseIf($LoginType -eq "SQLUser")
     {
+        # Write to log.
+        Write-Log ("Using SQL login for server '{0}' for data '{1}'" -f $Server, $Database);
+
         # Get basic connection string.
         [string]$ConnectionString = ('Server=tcp:{0},{1};User ID={2};Password={3};MultipleActiveResultSets=False;Encrypt=False;TrustServerCertificate=True;' -f $Server, $Port, $Username, $UnsecurePassword);
     }
+    # Else if the login type is "Azure AD Context".
+    ElseIf($LoginType -eq "AadContext")
+    {
+        # Write to log.
+        Write-Log ("Using Azure AD context login for server '{0}' for data '{1}'" -f $Server, $Database);
+        
+        # Get basic connection string.
+        [string]$ConnectionString = ('Data Source={0};Trusted_Connection=False;Encrypt=True;' -f $Server);
 
-    # If database is set.
+        # Get Azure AD token.
+        $AadAccessToken = Get-AzureSqlToken;
+    }
+
+    # If database is set else we will connect to "master".
     If(!([string]::IsNullOrEmpty($Database)))
     {
-        # Add database to string.
-        $ConnectionString += ('Database={0};' -f $Database);
+        # If Azure AD context authentication.
+        If($LoginType -eq "AadContext")
+        {
+            # Add database to string.
+            $ConnectionString += ('Initial Catalog={0};' -f $Database);
+        }
+        Else
+        {
+            # Add database to string.
+            $ConnectionString += ('Database={0};' -f $Database);
+        }
+    }
+
+    # Create object.
+    $SqlConnection = [PSCustomObject]@{
+        ConnectionString = $ConnectionString;
+    };
+
+    # If token is set.
+    If($AadAccessToken)
+    {
+        # Set Azure AD token.
+        $SqlConnection | Add-Member -MemberType NoteProperty -Name AccessToken -Value $AadAccessToken -Force;
     }
 
     # Return connection string.
-    Return $ConnectionString;
+    Return $SqlConnection;
 }
 
 # Create SQL login.
@@ -211,7 +284,7 @@ Function New-SqlLogin
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Login name.
         [Parameter(Mandatory=$true)][string]$LoginName,
@@ -248,16 +321,16 @@ Function New-SqlLogin
         # Construct query.
         [string]$Query =
 @"
-CREATE LOGIN [$LoginName] WITH PASSWORD = '$UnsecurePassword'
+CREATE LOGIN [$LoginName] WITH PASSWORD = N'$UnsecurePassword'
 "@;
 
         # If SID is set.
         If(!([string]::IsNullOrEmpty($SID)))
         {
             # Add to query.
-            $Query = ("{0}, SID = '{1}'" -f $Query, $SID);
+            $Query = ("{0}, SID = {1}" -f $Query, $SID);
         }
-        
+
         # Try to create.
         Try
         {
@@ -282,7 +355,7 @@ Function New-SqlUser
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Login name.
         [Parameter(Mandatory=$true)][string]$LoginName,
@@ -307,12 +380,12 @@ Function New-SqlUser
 @"
 CREATE USER [$LoginName] FOR LOGIN [$LoginName] WITH DEFAULT_SCHEMA=[$DefaultSchema];
 "@;
-Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+
         # Try to create.
         Try
         {
             # Invoke query.
-            #Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+            Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
 
             # Write to log.
             Write-Log ("Creating new user named '{0}' with the default schema '{1}'" -f $LoginName, $DefaultSchema);
@@ -332,7 +405,7 @@ Function Reset-SqlLoginPassword
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Login name.
         [Parameter(Mandatory=$true)][string]$LoginName,
@@ -351,7 +424,7 @@ Function Reset-SqlLoginPassword
     # Construct query.
     [string]$Query =
 @"
-ALTER LOGIN $LoginName WITH PASSWORD=N'$Password';
+ALTER LOGIN $LoginName WITH PASSWORD=N'$UnsecurePassword';
 "@;
 
     # Try to create.
@@ -377,7 +450,7 @@ Function Add-SqlLoginRole
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Login name.
         [Parameter(Mandatory=$true)][string]$LoginName,
@@ -415,7 +488,7 @@ Function Get-SqlLogin
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString
+        [Parameter(Mandatory=$true)]$ConnectionString
     )
 
     # Construct query.
@@ -448,7 +521,7 @@ Function Get-SqlUser
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString
+        [Parameter(Mandatory=$true)]$ConnectionString
     )
 
     # Construct query.
@@ -456,7 +529,7 @@ Function Get-SqlUser
 @"
 select *
 from sys.database_principals
-where type not in ('A', 'G', 'R', 'X')
+where type not in ('A', 'G', 'R')
       and sid is not null
       and name != 'guest'
 "@;
@@ -503,7 +576,7 @@ Function New-SqlDatabaseFromCopy
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString,
+        [Parameter(Mandatory=$true)]$ConnectionString,
 
         # Source server name.
         [Parameter(Mandatory=$true)][string]$SourceServer,
@@ -564,7 +637,7 @@ Function Get-SqlElasticPoolNameForDbs
     param
     (
         # Connection string.
-        [Parameter(Mandatory=$true)][string]$ConnectionString
+        [Parameter(Mandatory=$true)]$ConnectionString
     )
 
     # Construct query.
@@ -596,41 +669,172 @@ WHERE d.Name <> 'master'
     }
 }
 
+# Drop SQL login.
+Function Remove-SqlLogin
+{
+    [CmdletBinding()]
+    param
+    (
+        # Connection string.
+        [Parameter(Mandatory=$true)]$ConnectionString,
+
+        # Login name.
+        [Parameter(Mandatory=$true)][string]$LoginName
+    )
+
+    # Construct query.
+    [string]$Query =
+@"
+DROP LOGIN [$LoginName]
+"@;
+
+    # Get SQL logins.
+    $SqlLogins = Get-SqlLogin -ConnectionString $ConnectionString;
+
+    # Check if login already exist.
+    If(!($SqlLogins | Where-Object {$_.Name -eq $LoginName}))
+    {
+        # Write to log.
+        Write-Log ("SQL login '{0}' doesnt exist" -f $LoginName);
+    }
+    # Login exist.
+    Else
+    {
+        # Try to delete.
+        Try
+        {
+            # Invoke query.
+            Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+
+            # Write to log.
+            Write-Log ("Dropped SQL login '{0}'" -f $LoginName);
+        }
+        Catch
+        {
+            # Write to log.
+            Write-Log ("Something went wrong dropping SQL login '{0}'" -f $LoginName);
+        }
+    }
+}
+
+# Drop SQL user.
+Function Remove-SqlUser
+{
+    [CmdletBinding()]
+    param
+    (
+        # Connection string.
+        [Parameter(Mandatory=$true)]$ConnectionString,
+
+        # Login name.
+        [Parameter(Mandatory=$true)][string]$LoginName
+    )
+
+    # Construct query.
+    [string]$Query =
+@"
+DROP USER [$LoginName]
+"@;
+
+    # Get SQL logins.
+    $SqlUsers = Get-SqlUser -ConnectionString $ConnectionString;
+
+    # Check if login already exist.
+    If(!($SqlUsers | Where-Object {$_.Name -eq $LoginName}))
+    {
+        # Write to log.
+        Write-Log ("SQL user '{0}' doesnt exist" -f $LoginName);
+    }
+    # User exist.
+    Else
+    {
+        # Try to create.
+        Try
+        {
+            # Invoke query.
+            Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+
+            # Write to log.
+            Write-Log ("Dropped SQL user '{0}'" -f $LoginName);
+        }
+        Catch
+        {
+            # Write to log.
+            Write-Log ("Something went wrong dropping SQL user '{0}'" -f $LoginName);
+        }
+    }
+}
+
+# Drop SQL database.
+Function Remove-SqlDatabase
+{
+    [CmdletBinding()]
+    param
+    (
+        # Connection string.
+        [Parameter(Mandatory=$true)]$ConnectionString,
+
+        # Login name.
+        [Parameter(Mandatory=$true)][string]$Database
+    )
+
+    # Construct query.
+    [string]$Query =
+@"
+DROP DATABASE IF EXISTS [$Database];
+"@;
+
+
+    # Try to create.
+    Try
+    {
+        # Invoke query.
+        Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+
+        # Write to log.
+        Write-Log ("Dropped database '{0}', if it existed" -f $Database);
+    }
+    Catch
+    {
+        # Write to log.
+        Write-Log ("Something went wrong dropping SQL database '{0}'" -f $Database);
+    }
+}
+
 # Copy SQL database from server to another in Azure.
 Function Copy-AzureSqlDatabase
 {
     [CmdletBinding()]
     param
     (
-        # Username and passwords for SQL user for the database.
-        [Parameter(Mandatory=$true)][string]$SqlUsername,
-        [Parameter(Mandatory=$true)][securestring]$SqlPassword,
-
         # Source database server/database details.
         [Parameter(Mandatory=$true)][string]$SourceDbServer,
         [Parameter(Mandatory=$true)][string]$SourceDbName,
-        [Parameter(Mandatory=$true)][string]$SourceUsername,
-        [Parameter(Mandatory=$true)][securestring]$SourcePassword,
-        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser")][string]$SourceLoginType,
+        [Parameter(Mandatory=$false)][string]$SourceUsername,
+        [Parameter(Mandatory=$false)][securestring]$SourcePassword,
+        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser", "AadContext")][string]$SourceLoginType,
 
         # Target database server/database details.
         [Parameter(Mandatory=$true)][string]$TargetDbServer,
         [Parameter(Mandatory=$true)][string]$TargetDbName,
-        [Parameter(Mandatory=$true)][string]$TargetUsername,
-        [Parameter(Mandatory=$true)][securestring]$TargetPassword,
-        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser")][string]$TargetLoginType,
-        [Parameter(Mandatory=$true)][string]$TargetElasticPoolName
+        [Parameter(Mandatory=$false)][string]$TargetUsername,
+        [Parameter(Mandatory=$false)][securestring]$TargetPassword,
+        [Parameter(Mandatory=$true)][ValidateSet("AADPassword", "SQLUser", "AadContext")][string]$TargetLoginType
     )
 
+    # Name and password of the user which will be created to do the copy (it will be created).
+    [string]$SqlUsername = 'SqlCopyAccount';
+    [securestring]$SqlPassword = (New-Password -Length 18 | ConvertTo-SecureString -AsPlainText -Force);
+
     # Create connection string to source master database.
-    [string]$SourceConnectionStringMaster = Get-SqlConnectionString -Server $SourceDbServer `
+    $SourceConnectionStringMaster = Get-SqlConnectionString -Server $SourceDbServer `
                                                                     -Username $SourceUsername `
                                                                     -Password $SourcePassword `
                                                                     -LoginType $SourceLoginType;
 
 
     # Create connection string to source application database.
-    [string]$SourceConnectionStringApplication = Get-SqlConnectionString -Server $SourceDbServer `
+    $SourceConnectionStringApplication = Get-SqlConnectionString -Server $SourceDbServer `
                                                                     -Database $SourceDbName `
                                                                     -Username $SourceUsername `
                                                                     -Password $SourcePassword `
@@ -638,6 +842,15 @@ Function Copy-AzureSqlDatabase
 
     # Write to log.
     Write-Log ("Connecting to '{0}' (source)" -f $SourceDbServer);
+
+    # Drop existing login.
+    Remove-SqlLogin -ConnectionString $SourceConnectionStringMaster -LoginName $SqlUsername;
+
+    # Drop existing user in master database.
+    Remove-SqlUser -ConnectionString $SourceConnectionStringMaster -LoginName $SqlUsername;
+
+    # Drop existing user in application database.
+    Remove-SqlUser -ConnectionString $SourceConnectionStringApplication -LoginName $SqlUsername;
 
     # New SQL login in master.
     New-SqlLogin -ConnectionString $SourceConnectionStringMaster -LoginName $SqlUsername -Password $SqlPassword;
@@ -658,13 +871,13 @@ Function Copy-AzureSqlDatabase
     [string]$SourceSqlLoginSid = (Get-SqlLogin -ConnectionString $SourceConnectionStringMaster | Where-Object {$_.Name -eq $SqlUsername} | Select-Object @{Name = "SID"; Expression = {ConvertTo-SQLHashString -Binary $_.sid}}).SID;
 
     # Create connection string to target master database.
-    [string]$DestinationConnectionStringMaster = Get-SqlConnectionString -Server $TargetDbServer `
+    $DestinationConnectionStringMaster = Get-SqlConnectionString -Server $TargetDbServer `
                                                                     -Username $TargetUsername `
                                                                     -Password $TargetPassword `
-                                                                    -LoginType "AADPassword";
+                                                                    -LoginType $TargetLoginType;
 
     # Create connection string to target master database using SQL credentail.
-    [string]$DestinationConnectionStringMasterSqlCred = Get-SqlConnectionString -Server $TargetDbServer `
+    $DestinationConnectionStringMasterSqlCred = Get-SqlConnectionString -Server $TargetDbServer `
                                                                     -Username $SqlUsername `
                                                                     -Password $SqlPassword `
                                                                     -LoginType SQLUser;
@@ -672,21 +885,44 @@ Function Copy-AzureSqlDatabase
     # Write to log.
     Write-Log "";
     Write-Log ("Connecting to '{0}' (target)" -f $TargetDbServer);
+
+    # Check if source and destination is not the same.
+    If($SourceDbServer -ne $TargetDbServer)
+    {
+        # Drop existing login.
+        Remove-SqlLogin -ConnectionString $DestinationConnectionStringMaster -LoginName $SqlUsername;
+
+        # Drop existing user in master database.
+        Remove-SqlUser -ConnectionString $DestinationConnectionStringMaster -LoginName $SqlUsername;
     
-    # New SQL login in master.
-    New-SqlLogin -ConnectionString $DestinationConnectionStringMaster `
-                 -LoginName $SqlUsername `
-                 -Password $SqlPassword;
-
-    # New SQL user on master database.
-    New-SqlUser -ConnectionString $DestinationConnectionStringMaster `
-                -LoginName $SqlUsername `
-                -DefaultSchema dbo;
-
-    # Add role to master database.
-    Add-SqlLoginRole -ConnectionString $DestinationConnectionStringMaster `
+        # New SQL login in master.
+        New-SqlLogin -ConnectionString $DestinationConnectionStringMaster `
                      -LoginName $SqlUsername `
-                     -Role dbmanager;
+                     -Password $SqlPassword `
+                     -SID $SourceSqlLoginSid;
+
+        # New SQL user on master database.
+        New-SqlUser -ConnectionString $DestinationConnectionStringMaster `
+                    -LoginName $SqlUsername `
+                    -DefaultSchema dbo;
+
+        # Add role to master database.
+        Add-SqlLoginRole -ConnectionString $DestinationConnectionStringMaster `
+                         -LoginName $SqlUsername `
+                         -Role dbmanager;
+    }
+    # Server source and destination is the same.
+    Else
+    {
+        # Write to log.
+        Write-Log ("Source and target database server is the same, skipping login/user creation" -f $TargetDbServer);
+    }
+
+    # Drop database on destination if it exists.
+    Remove-SqlDatabase -ConnectionString $DestinationConnectionStringMaster -Database $TargetDbName;
+
+    # Get elastic pool name.
+    $TargetElasticPoolName = Get-SqlElasticPoolNameForDbs -ConnectionString $DestinationConnectionStringMaster | Select-Object -ExpandProperty elastic_pool_name -First 1;
 
     # Copy database from source to a new database.
     New-SqlDatabaseFromCopy -ConnectionString $DestinationConnectionStringMasterSqlCred `
@@ -694,6 +930,123 @@ Function Copy-AzureSqlDatabase
                             -SourceDatabaseName $SourceDbName `
                             -DestinationDatabaseName $TargetDbName `
                             -ElasticPoolName $TargetElasticPoolName;
+
+    # If CDC is enabled.
+    If(Get-AzureSqlDatabaseCdc -ConnectionString $DestinationConnectionStringMaster | Where-Object {$_.Name -eq $TargetDbName})
+    {
+        # Create connection string to target application database.
+        $DestinationConnectionStringApplication = Get-SqlConnectionString -Server $TargetDbServer `
+                                                                            -Database $TargetDbName `
+                                                                            -Username $TargetUsername `
+                                                                            -Password $TargetPassword `
+                                                                            -LoginType $TargetLoginType;
+
+        # Write to log.
+        Write-Log ("Disabling CDC for database '{0}'" -f $TargetDbName);
+        
+        # Disable CDC.
+        Disable-AzureSqlDatabaseCdc -ConnectionString $DestinationConnectionStringApplication;
+    }
+
+    # Clean up SQL login and user permission.
+    Remove-SqlLogin -ConnectionString $SourceConnectionStringMaster -LoginName $SqlUsername;
+    Remove-SqlUser -ConnectionString $SourceConnectionStringMaster -LoginName $SqlUsername;
+    Remove-SqlUser -ConnectionString $SourceConnectionStringApplication -LoginName $SqlUsername;
+    Remove-SqlLogin -ConnectionString $DestinationConnectionStringMaster -LoginName $SqlUsername;
+    Remove-SqlUser -ConnectionString $DestinationConnectionStringMaster -LoginName $SqlUsername;
+}
+
+# Generate password.
+Function New-Password
+{
+    param
+    (
+        [Parameter(Mandatory = $false)][int]$Length = 20
+    )
+    
+    # Characters allowed.
+    $CharSet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$'.ToCharArray();
+    
+    # Create new crypto object.
+    $RNGCrypto = New-Object System.Security.Cryptography.RNGCryptoServiceProvider;
+
+    # Convert length to bytes.
+    $Bytes = New-Object byte[]($Length);
+ 
+    # Get bytes.
+    $RNGCrypto.GetBytes($Bytes);
+ 
+    # New char object.
+    $Result = New-Object char[]($Length);
+
+    # For each byte.
+    for ($i = 0 ; $i -lt $Length ; $i++)
+    {
+        # Add random char to result.
+        $Result[$i] = $CharSet[$Bytes[$i]%$CharSet.Length];
+    }
+ 
+    # Combine and return charset.
+    Return (-join $Result) + "==";
+}
+
+# Get database with CDC enabled.
+Function Get-AzureSqlDatabaseCdc
+{
+    [CmdletBinding()]
+    param
+    (
+        # Connection string.
+        [Parameter(Mandatory=$true)]$ConnectionString
+    )
+
+    # Construct query.
+    [string]$Query =
+@"
+SELECT name, database_id, is_cdc_enabled FROM sys.databases
+WHERE is_cdc_enabled = 1
+"@;
+
+    # Try to create.
+    Try
+    {
+        # Invoke query.
+        Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+    }
+    Catch
+    {
+        # Write to log.
+        Write-Log ("Something went wrong getting databases with CDC enabled");
+    }
+}
+
+# Disable database CDC.
+Function Disable-AzureSqlDatabaseCdc
+{
+    [CmdletBinding()]
+    param
+    (
+        # Connection string.
+        [Parameter(Mandatory=$true)]$ConnectionString
+    )
+
+    # Construct query.
+    [string]$Query =
+@"
+EXEC sys.sp_cdc_disable_db;
+"@;
+
+    # Try to create.
+    Try
+    {
+        # Invoke query.
+        Invoke-SqlQuery -ConnectionString $ConnectionString -Query $Query;
+    }
+    Catch
+    {
+        # Write to log.
+        Write-Log ("Something went wrong getting databases with CDC enabled");
+    }
 }
 
 ############### Functions - End ###############
@@ -703,9 +1056,7 @@ Function Copy-AzureSqlDatabase
 ############### Main - Start ###############
 
 # Copy Azure SQL database.
-Copy-AzureSqlDatabase -SqlUsername $SqlUsername `
-                      -SqlPassword $SqlPassword `
-                      -SourceDbServer $SourceDbServer `
+Copy-AzureSqlDatabase -SourceDbServer $SourceDbServer `
                       -SourceDbName $SourceDbName `
                       -SourceUsername $SourceUsername `
                       -SourcePassword $SourcePassword `
@@ -714,8 +1065,7 @@ Copy-AzureSqlDatabase -SqlUsername $SqlUsername `
                       -TargetDbName $TargetDbName `
                       -TargetUsername $TargetUsername `
                       -TargetPassword $TargetPassword `
-                      -TargetLoginType $TargetLoginType `
-                      -TargetElasticPoolName $TargetElasticPoolName;
+                      -TargetLoginType $TargetLoginType;
 
 ############### Main - End ###############
 #endregion
