@@ -149,7 +149,7 @@ Function Invoke-SqlQuery
 
     # Construct command.
     $DatabaseQuery = New-Object System.Data.SqlClient.SqlCommand;
-    $DatabaseQuery.Connection = $ConnectionString;
+    $DatabaseQuery.Connection = $DatabaseConnection;
     $DatabaseQuery.CommandText = $Query;
     $DatabaseQuery.CommandTimeout = 0;;
 
