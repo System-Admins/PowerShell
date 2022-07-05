@@ -362,7 +362,7 @@ Function Clone-AzureCosmosDb
     )
 
     # Get Azure subscription.
-    $AzureSubscription = Get-AzSubscription;
+    $AzureSubscription = (Get-AzContext).Subscription;
 
     # If source account exist.
     If($SourceAccount = Get-AzCosmosDBAccount -ResourceGroupName $SourceResourceGroupName -Name $SourceAccountName -ErrorAction SilentlyContinue)
