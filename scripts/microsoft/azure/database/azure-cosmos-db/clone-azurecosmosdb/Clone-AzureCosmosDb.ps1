@@ -369,11 +369,9 @@ Function Clone-AzureCosmosDb
     {
         # Write to log.
         Write-Log ("Getting latest available backup from source Cosmos DB account '{0}' in resource group '{1}', this might take a while" -f $SourceAccountName, $SourceResourceGroupName);
-
-        $SourceCosmosDbBackupInfo = Import-Clixml -Path "C:\Users\xalth\OneDrive - PensionDanmark\Skrivebord\Repositories\Infrastruktur\Powershell\cosmosDb\object.xml"
-
+	
         # Get backup info from source.
-        #$SourceCosmosDbBackupInfo = Get-AzureCosmosDbBackupInfo -ResourceGroupName $SourceResourceGroupName -AccountName $SourceAccountName;
+        $SourceCosmosDbBackupInfo = Get-AzureCosmosDbBackupInfo -ResourceGroupName $SourceResourceGroupName -AccountName $SourceAccountName;
 
         # Write to log.
         Write-Log ("Latest available backup is '{0}'" -f $SourceCosmosDbBackupInfo.Account.LatestBackup);
