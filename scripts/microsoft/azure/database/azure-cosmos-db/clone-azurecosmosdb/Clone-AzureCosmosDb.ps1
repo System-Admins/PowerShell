@@ -506,7 +506,8 @@ Function Clone-AzureCosmosDb
 
         # Target.
         [Parameter(Mandatory=$true)][string]$TargetResourceGroupName,
-        [Parameter(Mandatory=$true)][string]$TargetAccountName
+        [Parameter(Mandatory=$true)][string]$TargetAccountName,
+        [Parameter(Mandatory=$false)][bool]$DeleteTargetIfExist = $false
     )
 
     # Get Azure subscription.
@@ -694,7 +695,8 @@ Function Clone-AzureCosmosDb
 Clone-AzureCosmosDb -SourceResourceGroupName $SourceResourceGroupName `
                     -SourceAccountName $SourceAccountName `
                     -TargetResourceGroupName $TargetResourceGroupName `
-                    -TargetAccountName $TargetAccountName;
+                    -TargetAccountName $TargetAccountName `
+                    -DeleteTargetIfExist $DeleteTargetIfExist;
 
 ############### Main - End ###############
 #endregion
