@@ -361,4 +361,4 @@ $CosmosDbBackupInfo = Get-AzureCosmosDbBackupInfo -ResourceGroupName "<optional>
 # Get account restore.
 $CosmosDbBackupInfo.Account | Select-Object CosmosDbAccount, LatestBackup;
 $CosmosDbBackupInfo.Database | Select-Object CosmosDbAccount, CosmosDbDatabase, LatestBackup;
-$CosmosDbBackupInfo.Containers | Select-Object CosmosDbAccount, CosmosDbDatabase, CosmosDbContainer, LatestBackup;
+$CosmosDbBackupInfo.Container | Select-Object CosmosDbAccount, CosmosDbDatabase, CosmosDbContainer, LatestBackup;
