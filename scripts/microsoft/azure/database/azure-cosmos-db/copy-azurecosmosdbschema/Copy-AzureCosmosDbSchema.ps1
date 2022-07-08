@@ -16,7 +16,7 @@
 .DESCRIPTION
   This script allows you to copy a Azure Cosmos DB schema (databases and containers). The script is split in two parts with the "action" parameter.
   Export = Exports account, database and container info to a file in temp.
-  Import = Creates account, database and containers if it doesnt exist.
+  Import = Creates and import account, database and containers if it doesnt exist.
   
   Usage would be:
   .\Copy-AzureCosmosDbSchema.ps1 -Action "Export" -ResourceGroupName "<source resource group name>" -AccountName "<source Cosmos DB account>"
