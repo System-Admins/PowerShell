@@ -3,9 +3,7 @@
 <#
 .SYNOPSIS
   Add or update an Win32 application in Microsoft Intune.
-
 .DESCRIPTION
-
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
@@ -27,9 +25,9 @@
 
 # Azure AD.
 $AzureADApp = @{
-    TenantId = '<Tenant ID>';
-    ClientId = '<Application ID>';
-    ClientSecret = '<Secret>';
+    TenantId = '.....';
+    ClientId = '.....';
+    ClientSecret = '.....';
 };
 
 # Application to update.
@@ -41,6 +39,7 @@ $Application = @{
     "Developer" = "Slack Technologies Inc.";
     "Path" = "C:\Users\xalth\OneDrive - PensionDanmark\Skrivebord\Slack Technologies Inc\Slack\x86\4.27.154\slack-standalone-4.27.154.0.intunewin";
     "DetectionScript" = "C:\Users\xalth\OneDrive - PensionDanmark\Skrivebord\Slack Technologies Inc\Slack\x86\4.27.154\Detect-InstalledSoftware.ps1";
+    "RequirementScript" = "";
     "EnforceSignatureCheck" = $false;
     "InstallCmd" = 'msiexec /i slack-standalone-4.27.154.0.msi /qn';
     "UninstallCmd" = 'msiexec /i slack-standalone-4.27.154.0.msi /qn';
@@ -238,7 +237,7 @@ Function New-DetectionRule
     )
 
     # Write to log.
-    Write-Log ("Converting '{0}' detection script to BASE64" -f $ScriptPath);
+    Write-Log ("Converting '{0}' detection script to BASE64" -f $Path);
     Write-Log ("Enforce signature check is set to '{0}'" -f $EnforceSignatureCheck);
     Write-Log ("Will run as a 32-bit process '{0}'" -f $RunAs32Bit);
 
@@ -255,6 +254,52 @@ Function New-DetectionRule
 
     # Return detection rule.
     Return $DetectionRule;
+}
+
+# Create detection rule.
+Function New-RequirementScript
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$false)][string]$Path,
+        [Parameter(Mandatory=$true)][bool]$EnforceSignatureCheck,
+        [Parameter(Mandatory=$true)][bool]$RunAs32Bit
+    )
+
+    # If path is set.
+    If(!([string]::IsNullOrEmpty($Path)))
+    {
+        # Write to log.
+        Write-Log ("Converting '{0}' requirement script to BASE64" -f $Path);
+        Write-Log ("Enforce signature check is set to '{0}'" -f $EnforceSignatureCheck);
+        Write-Log ("Will run as a 32-bit process '{0}'" -f $RunAs32Bit);
+
+        # Convert script to BASE64.
+        $Script = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($Path));
+
+        # Construct requirement.
+        $Requirement = @{
+            '@odata.type' = "#microsoft.graph.win32LobAppPowerShellScriptRequirement";
+            'enforceSignatureCheck' = $EnforceSignatureCheck;
+            'runAs32Bit' = $RunAs32Bit;
+            'scriptContent' = $Script;
+            'operator' = "equal"
+            'detectionValue' = "Upgrade"
+            'displayName' = "Upgrade previous installation"
+            'runAsAccount' = 'system'
+            'detectionType' = "string"
+        };
+
+        # Return detection rule.
+        Return $Requirement;   
+    }
+    Else
+    {
+        # Write to log.
+        Write-Log ("Requirement script not set, skipping");
+    }
 }
 
 # Extract the IntuneWin file.
@@ -382,10 +427,11 @@ Function New-IntuneWin32App
         [Parameter(Mandatory=$true)][bool]$RunAs32Bit,
         [Parameter(Mandatory=$true)][string]$SetupFileName,
         [Parameter(Mandatory=$true)]$DetectionRule,
+        [Parameter(Mandatory=$false)]$RequirementScript,
         [Parameter(Mandatory=$true)]$ReturnCodes
     )
 
-    #Create reqeust body.
+    # Create reqeust body.
     $Body = @{
         '@odata.type' = "#microsoft.graph.win32LobApp";
         'description' = $Description;
@@ -408,7 +454,17 @@ Function New-IntuneWin32App
         'setupFileName' = $SetupFileName;
         'detectionRules' = $DetectionRule;
         'returnCodes' = $ReturnCodes;
-    } | ConvertTo-Json;
+    }
+
+    # If requirement script is set.
+    If(!([string]::IsNullOrEmpty($RequirementScript)))
+    {
+        # Add to body.
+        $Body.Add('requirementRules', $RequirementScript);   
+    }
+    
+    # Convert to JSON.
+    $Body = $Body | ConvertTo-Json;
 
     # Create request headers.
     $Headers = @{
@@ -734,7 +790,7 @@ Function Upload-IntuneWin32AppFile
         $Body = $Bytes[$Start..$End];
 
         # Write to log.
-        Write-Log ("Uploaded {0}% of the application to Intune" -f $($Counter/$Chunks*100));
+        Write-Log ("Uploaded {0}% of the application to Intune" -f [math]::Round($($Counter/$Chunks*100)));
 
         # Add to counter.
         $Counter++;
@@ -857,6 +913,11 @@ Function Add-IntuneWin32App
                       -EnforceSignatureCheck $Application.EnforceSignatureCheck `
                       -RunAs32Bit $Application.RunAs32Bit;
 
+    # Get requirement script.
+    $RequirementScript = New-RequirementScript -Path $Application.RequirementScript `
+                            -EnforceSignatureCheck $Application.EnforceSignatureCheck `
+                            -RunAs32Bit $Application.RunAs32Bit;
+
     # Get default return codes.
     $ReturnCodes = Get-ReturnCodes;
 
@@ -892,6 +953,7 @@ Function Add-IntuneWin32App
                                          -RunAs32Bit $Application.RunAs32Bit `
                                          -SetupFileName $DetectionXml.ApplicationInfo.SetupFile `
                                          -DetectionRule @($DetectionRule) `
+                                         -RequirementScript @($RequirementScript) `
                                          -ReturnCodes $ReturnCodes;
 
     # Create new content version for the Win32 client app in Intune.
@@ -966,6 +1028,7 @@ Function Update-IntuneWin32App
         [Parameter(Mandatory=$true)][bool]$RunAs32Bit,
         [Parameter(Mandatory=$true)][string]$SetupFileName,
         [Parameter(Mandatory=$true)]$DetectionRule,
+        [Parameter(Mandatory=$false)]$RequirementScript,
         [Parameter(Mandatory=$true)]$ReturnCodes
     )
 
@@ -992,7 +1055,17 @@ Function Update-IntuneWin32App
         'setupFileName' = $SetupFileName;
         'detectionRules' = $DetectionRule;
         'returnCodes' = $ReturnCodes;
-    } | ConvertTo-Json;
+    };
+
+    # If requirement script is set.
+    If(!([string]::IsNullOrEmpty($RequirementScript)))
+    {
+        # Add to body.
+        $Body.Add('requirementRules', $RequirementScript);   
+    }
+    
+    # Convert to JSON.
+    $Body = $Body | ConvertTo-Json;
 
     # Create request headers.
     $Headers = @{
@@ -1035,6 +1108,11 @@ Function Replace-IntuneWin32App
                       -EnforceSignatureCheck $Application.EnforceSignatureCheck `
                       -RunAs32Bit $Application.RunAs32Bit;
 
+    # Get requirement script.
+    $RequirementScript = New-RequirementScript -Path $Application.RequirementScript `
+                            -EnforceSignatureCheck $Application.EnforceSignatureCheck `
+                            -RunAs32Bit $Application.RunAs32Bit;
+
     # Get default return codes.
     $ReturnCodes = Get-ReturnCodes;
 
@@ -1071,6 +1149,7 @@ Function Replace-IntuneWin32App
                                          -RunAs32Bit $Application.RunAs32Bit `
                                          -SetupFileName $DetectionXml.ApplicationInfo.SetupFile `
                                          -DetectionRule @($DetectionRule) `
+                                         -RequirementScript @($RequirementScript) `
                                          -ReturnCodes $ReturnCodes;
 
     # Create new content version for the Win32 client app in Intune.
