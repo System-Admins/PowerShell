@@ -7,7 +7,8 @@
 
 .DESCRIPTION
   Create compliance search by date intervals and exports data to several PST files.
-  You need the eDiscovery Manager Administrat role and the ExchangeOnlineManagement PowerShell module.
+  You need the eDiscovery Manager Administrator role and the ExchangeOnlineManagement PowerShell module.
+  It uses basic authentication for connection to Exchange Online.
 
 .NOTES
   Version:        1.0
@@ -18,6 +19,23 @@
 
 #region begin boostrap
 ############### Bootstrap - Start ###############
+
+[cmdletbinding()]
+
+Param
+(
+    # Username.
+    [Parameter(Mandatory=$true)][string]$Username,
+
+    # Password.
+    [Parameter(Mandatory=$true)][string]$Password,
+
+    # Output path for PST files.
+    [Parameter(Mandatory=$false)][string]$OutputPath = "C:\PstExport",
+
+    # Mailbox to export.
+    [Parameter(Mandatory=$true)][string[]]$Mailboxes
+)
 
 # Clear screen.
 Clear-Host;
@@ -34,18 +52,15 @@ Import-Module -Name "ExchangeOnlineManagement" -Force -DisableNameChecking;
 # Credentials.
 $Credentials = @{
     ExchangeOnline = @{
-        Username = '<upn of admin here>';
-        Password = '<password of admin here>';
+        Username = $Username;
+        Password = $Password;
     };
 };
 
 # Folders.
 $Folders = @{
-    PstOutput = "C:\PstExport";
+    PstOutput = $OutputPath;
 };
-
-# Mailboxes to export.
-$Mailboxes = @("<mailbox to export>");
 
 ############### Input - End ###############
 #endregion
