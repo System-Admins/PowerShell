@@ -912,7 +912,7 @@ Function Get-PackageInstallers
     ElseIf($PackageInstallers | Where-Object {$_.Architecture -eq $Architecture})
     {
         # Write to log.
-        Write-Log ("Found matching architecture for program");
+        Write-Log ("Found matching architecture '{0}' for program" -f $Architecture);
 
         # Return installers.
         Return $PackageInstallers | Where-Object {$_.Architecture -eq $Architecture};
@@ -980,6 +980,7 @@ Function Export-PackageInfo
         'developer' = $Package.Publisher;
         'installCommandLine' = $Package.Installer.InstallerCmdLine;
         'architecture' = $Package.Installer.Architecture;
+        'scope' = $Package.Installer.Scope;
     } | ConvertTo-Json;
 
     # Export file.
@@ -1049,7 +1050,7 @@ Function Download-InstallFile
     Add-Type -AssemblyName "System.Net" -IgnoreWarnings;
 
     # Write to log.
-    Write-Log ("Downloading '{0} ({1})' version '{2}' from '{3}' to '{4}', this might take a while" -f $Package.Name, $Package.Installer.Architecture, $Package.Version, $Package.Installer.InstallerUrl, $FilePath);
+    Write-Log ("Downloading '{0}' with architecture '{1}', version '{2}' from '{3}' to '{4}', this might take a while" -f $Package.Name, $Package.Installer.Architecture, $Package.Version, $Package.Installer.InstallerUrl, $FilePath);
 
     # Create new object.
     $WebClient = New-Object System.Net.WebClient;
