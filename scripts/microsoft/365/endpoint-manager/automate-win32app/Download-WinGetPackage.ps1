@@ -768,7 +768,7 @@ Function Get-PackageInstallers
                 $InstallerUrl = $Installer.InstallerUrl;
 
                 # Split URI into segments.
-                $UriParts = ($Installer.InstallerUrl -split "/");
+                $UriParts = ($InstallerUrl -split "/");
 
                 # If the download does not end with exe or msi.
                 If(!($UriParts[-1].EndsWith(".exe")) -or ($UriParts[-1].EndsWith(".msi")))
@@ -779,17 +779,24 @@ Function Get-PackageInstallers
                         # Get filename from URL.
                         $InstallerFileName = [uri]::UnescapeDataString($UriPart);
                     }
+                    # Else EXE exist.
                     ElseIf($UriPart = $UriParts | Where-Object {$_ -like "*.exe"} | Select-Object -First 1)
                     {
                         # Get filename from URL.
                         $InstallerFileName = [uri]::UnescapeDataString($UriPart);
+                    }
+                    # Else use original.
+                    Else
+                    {
+                        # Get filename from URL.
+                        $InstallerFileName = [uri]::UnescapeDataString($InstallerUrl -split "/")[-1]
                     }
                 }
                 # Else use the filename
                 Else
                 {
                     # Get filename from URL.
-                    $InstallerFileName = [uri]::UnescapeDataString($Uri -split "/")[-1];
+                    $InstallerFileName = [uri]::UnescapeDataString($InstallerUrl -split "/")[-1];
                 }
             }
 
