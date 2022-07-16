@@ -767,8 +767,30 @@ Function Get-PackageInstallers
                 # Set variable.
                 $InstallerUrl = $Installer.InstallerUrl;
 
-                # Installer filename.
-                $InstallerFileName = [uri]::UnescapeDataString(($Installer.InstallerUrl -split "/")[-1]);
+                # Split URI into segments.
+                $UriParts = ($Installer.InstallerUrl -split "/");
+
+                # If the download does not end with exe or msi.
+                If(!($UriParts[-1].EndsWith(".exe")) -or ($UriParts[-1].EndsWith(".msi")))
+                {
+                    # If MSI exist.
+                    If($UriPart = $UriParts | Where-Object {$_ -like "*.msi"} | Select-Object -First 1)
+                    {
+                        # Get filename from URL.
+                        $InstallerFileName = [uri]::UnescapeDataString($UriPart);
+                    }
+                    ElseIf($UriPart = $UriParts | Where-Object {$_ -like "*.exe"} | Select-Object -First 1)
+                    {
+                        # Get filename from URL.
+                        $InstallerFileName = [uri]::UnescapeDataString($UriPart);
+                    }
+                }
+                # Else use the filename
+                Else
+                {
+                    # Get filename from URL.
+                    $InstallerFileName = [uri]::UnescapeDataString($Uri -split "/")[-1];
+                }
             }
 
             # If installer type is set.
