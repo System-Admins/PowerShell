@@ -40,7 +40,7 @@
 }
 
 # Upload file to blob container.
-Upload-FileToAzBlob -SourceFile "C:\Users\AlexHansen\OneDrive - System Admins\Repositories\MaerskTankers\src\itops-report-app\ITOpsReportApp\ITOpsReportApp\Resources\adusers.json" `
+Upload-FileToAzBlob -SourceFile "....\filename.something" `
                     -KeepName:$false `
-                    -URL "https://sastmtitsreportapp01.blob.core.windows.net/adusers"  `
+                    -URL "https://<storageaccountname>.blob.core.windows.net/<container>"  `
                     -Token '?sp=acw&st=2022-03-25T14:06:26Z&se=2030-03-25T22:06:26Z&spr=https&sv=2020-08-04&sr=c&sig=Mdku1bmyTXVhLohEC5MWCtW4f8xyl0YKQSoHz%2BLnFDY%3D';
