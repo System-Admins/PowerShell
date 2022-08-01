@@ -307,6 +307,9 @@ Function Automate-Win32App
                                                 -InstallCmd $Package.Installer.InstallerCmdLine `
                                                 -InstallExperience $Package.Installer.Scope `
                                                 -ProjectUrl $Package.ProjectUrl;
+
+    # Write to log.
+    Write-Log ("Package automation (script) finished");
 }
 
 ############### Functions - End ###############
