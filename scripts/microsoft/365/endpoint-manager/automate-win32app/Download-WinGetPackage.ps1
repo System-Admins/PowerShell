@@ -655,7 +655,7 @@ Function Get-PackageDetails
         {
             # Add to object.
             $Package.Name = $Manifest.Resource.PackageName;
-            $Package.Version = $Manifest.Resource.PackageVersion;
+            $Package.Version = [string]$Manifest.Resource.PackageVersion;
             $Package.Publisher = $Manifest.Resource.Publisher;
             $Package.ProjectUrl = $Manifest.Resource.PackageUrl;
             $Package.Description = $Manifest.Resource.ShortDescription;
@@ -777,26 +777,26 @@ Function Get-PackageInstallers
                     If($UriPart = $UriParts | Where-Object {$_ -like "*.msi"} | Select-Object -First 1)
                     {
                         # Get filename from URL.
-                        $InstallerFileName = [uri]::UnescapeDataString($UriPart);
+                        $InstallerFileName = ([uri]::UnescapeDataString($UriPart) -split "/")[-1];
                     }
                     # Else EXE exist.
                     ElseIf($UriPart = $UriParts | Where-Object {$_ -like "*.exe"} | Select-Object -First 1)
                     {
                         # Get filename from URL.
-                        $InstallerFileName = [uri]::UnescapeDataString($UriPart);
+                        $InstallerFileName = ([uri]::UnescapeDataString($UriPart) -split "/")[-1];
                     }
                     # Else use original.
                     Else
                     {
                         # Get filename from URL.
-                        $InstallerFileName = [uri]::UnescapeDataString($InstallerUrl -split "/")[-1]
+                        $InstallerFileName = ([uri]::UnescapeDataString($InstallerUrl) -split "/")[-1];
                     }
                 }
                 # Else use the filename
                 Else
                 {
                     # Get filename from URL.
-                    $InstallerFileName = [uri]::UnescapeDataString($InstallerUrl -split "/")[-1];
+                    $InstallerFileName = ([uri]::UnescapeDataString($InstallerUrl) -split "/")[-1];
                 }
             }
 
@@ -1019,17 +1019,17 @@ Function Export-PackageInfo
 
     # Construct JSON for Intune upload.
     $Json = @{
-        'displayName' = $Package.Name;
-        'displayVersion' = $Package.Version;
-        'description' = $Package.Description;
-        'publisher' = $Package.Publisher;
-        'privacyInformationUrl' = $Package.ProjectUrl;
-        'informationUrl' = $Package.ProjectUrl;
-        'owner' = $Package.Publisher;
-        'developer' = $Package.Publisher;
-        'installCommandLine' = $Package.Installer.InstallerCmdLine;
-        'architecture' = $Package.Installer.Architecture;
-        'scope' = $Package.Installer.Scope;
+        'displayName' = [string]$Package.Name;
+        'displayVersion' = [string]$Package.Version;
+        'description' = [string]$Package.Description;
+        'publisher' = [string]$Package.Publisher;
+        'privacyInformationUrl' = [string]$Package.ProjectUrl;
+        'informationUrl' = [string]$Package.ProjectUrl;
+        'owner' = [string]$Package.Publisher;
+        'developer' = [string]$Package.Publisher;
+        'installCommandLine' = [string]$Package.Installer.InstallerCmdLine;
+        'architecture' = [string]$Package.Installer.Architecture;
+        'scope' = [string]$Package.Installer.Scope;
     } | ConvertTo-Json;
 
     # Export file.

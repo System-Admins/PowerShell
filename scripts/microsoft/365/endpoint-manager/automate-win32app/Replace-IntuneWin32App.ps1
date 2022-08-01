@@ -665,6 +665,33 @@ Function Commit-IntuneWin32MsiApp
     Return $Response;
 }
 
+# Renew SAS upload token.
+Function Renew-IntuneUploadSasToken
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)]$ApiToken,
+        [Parameter(Mandatory=$true)]$Uri
+    )
+
+    # Write to log.
+    Write-Log ("Renewing SAS token for upload");
+
+    # Create request headers.
+    $Headers = @{
+        'Authorization' = $ApiToken;
+        'content-type' = 'application/json';
+    };
+
+    # Make a request.
+    $Response = Invoke-WebRequest $Uri -Method Post -Headers $Headers  -ContentType "application/json";
+
+    # Return reponse.
+    Return $Response;
+}
+
 # Upload app file to Azure blob storage.
 Function Upload-IntuneWin32AppFile
 {
@@ -673,8 +700,15 @@ Function Upload-IntuneWin32AppFile
     Param
     (
         [Parameter(Mandatory=$true)]$Path,
-        [Parameter(Mandatory=$true)]$SasUri
+        [Parameter(Mandatory=$true)]$SasUri,
+        [Parameter(Mandatory=$true)]$ApiToken,
+        [Parameter(Mandatory=$true)][string]$AppId,
+        [Parameter(Mandatory=$true)][string]$ContentVersionId,
+        [Parameter(Mandatory=$true)][string]$FileId
     )
+
+    # Start the timer for SAS URI renewal.
+	$SasRenewalTimer = [System.Diagnostics.Stopwatch]::StartNew();
 
     # Chunk size (1 MiB).
     $ChunkSize = 1024 * 1024;
@@ -707,6 +741,9 @@ Function Upload-IntuneWin32AppFile
         # Get part of bytes.
         $Body = $Bytes[$Start..$End];
 
+        # Get current chunk.
+        $CurrentChunk = $Chunk + 1;
+
         # Write to log.
         Write-Log ("Uploaded {0}% of the application to Intune" -f [math]::Round($($Counter/$Chunks*100)));
 
@@ -715,6 +752,22 @@ Function Upload-IntuneWin32AppFile
 
         # Try to upload chunk.
         $Response = Upload-AzureStorageChunk -SasUri $SasUri -Base64 $Base64String -Body $Body;
+
+        # If 7 minutes have elapsed since the upload started or was renewed last.
+		If ($CurrentChunk -lt $Chunks -and $SasRenewalTimer.ElapsedMilliseconds -ge 450000)
+        {
+            # Write to log.
+            Write-Log ("Upload Azure Storage SAS token is expired");
+
+            # Construct URI.
+            $RenewUri = ("https://graph.microsoft.com/beta/deviceAppManagement/mobileApps/{0}/microsoft.graph.win32LobApp/contentVersions/{1}/files/{2}/renewUpload" -f $AppId, $ContentVersionId, $FileId);
+
+            # Renew upload SAS token.
+            Renew-IntuneUploadSasToken -ApiToken $ApiToken -Uri $Uri;
+
+            # Restart timer.
+			$SasRenewalTimer.Restart();	
+        }
     }
 
     # Write to log.
@@ -986,7 +1039,11 @@ Function Replace-IntuneWin32App
 
     # Upload to Azure.
     Upload-IntuneWin32AppFile -Path ('{0}\IntuneWinPackage\Contents\{1}' -f $IntuneWinOutput, $DetectionXml.ApplicationInfo.FileName) `
-                              -SasUri $AzureStorageUriRequestProcessingStatus.azureStorageUri;
+                              -SasUri $AzureStorageUriRequestProcessingStatus.azureStorageUri `
+                              -ApiToken $ApiToken `
+                              -AppId $IntuneWin32App.id `
+                              -ContentVersionId $IntuneWin32AppContentVersion.id `
+                              -FileId $InteunWin32AppUpload.id;
 
     # Commit file upload to Azure.
     $IntuneWin32AppUploadCommit = Commit-IntuneWin32AppFile -ApiToken $ApiToken `
