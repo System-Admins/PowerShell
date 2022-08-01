@@ -2,10 +2,32 @@
 
 <#
 .SYNOPSIS
-  
+  This script runs multiple script for automating package updates in Microsoft Intune (Endpoint Manager).
+  It uses REST methods for all interactions and does the following:
+  - Downloads package info from WinGet repository.
+  - Uses package info for downloading the installation binary.
+  - Convert the package to IntuneWin format.
+  - Check if version already is deployed in Microsoft Intune.
+  - Creates and upload an "update" version for users that have old version or is not required (available only) in Intune.
 
 .DESCRIPTION
-  
+  Check the scripts for further description of each step.
+  Download-WinGetPackage.ps1
+  Get-IntuneWin32Apps.ps1
+  Run-IntuneWinAppUtil.ps1
+  Copy-File.ps1
+  Replace-IntuneWin32App.ps1
+  Add-IntuneWin32App.ps1
+  Remove-IntuneWin32App.ps1
+
+.Parameter AzureAdTenantId
+  Azure Tenant ID.
+
+.Parameter AzureAdClientId
+  Application/Client ID of the Azure AD app (service principal).
+
+.Parameter AzureAdClientSecret
+  Secret of the Azure AD app (service principal).
 
 .Parameter PackageId
   The package id from WinGet. You can find an ID through WinGet utility or https://winget.run
@@ -14,8 +36,7 @@
   If the program should be 64 (x64) or 32-bit (x86).
 
 .Example
-   # Download latest version of Slack. 
-   .\Download-WinGetPackage.ps1 -PackageId "SlackTechnologies.Slack" -Architecture "x86";
+   .\Automate-Win32App.ps1 -AzureAdTenantId "<Tenant ID>" -AzureAdClientId "<Client ID> -AzureAdClientSecret "<Secret>" -PackageId "SlackTechnologies.Slack" -Architecture "x86";
 
 .NOTES
   Version:        0.1
@@ -40,10 +61,10 @@ Param
     # Secret of the Azure AD app (service principal).
     [Parameter(Mandatory=$true)][string]$AzureAdClientSecret,
 
-    # Package id.
+    # The package id from WinGet. You can find an ID through WinGet utility or https://winget.run.
     [Parameter(Mandatory=$true)][string]$PackageId,
 
-    # Architecture (x86 or x64).
+    # If the program should be 64 (x64) or 32-bit (x86).
     [Parameter(Mandatory=$true)][ValidateSet("x64", "x86")][string]$PackageArchitecture
 )
 
