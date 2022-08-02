@@ -130,7 +130,7 @@ Function Check-Module
         If(Get-PSRepository -Name "PSGallery" | Where-Object {$_.InstallationPolicy -ne "Trusted"})
         {
             # Trust PSGallery.
-            Set-PSGalleryRepository -Trusted -ErrorAction SilentlyContinue;
+            Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -ErrorAction SilentlyContinue;
         }
 
         # Try to install.
