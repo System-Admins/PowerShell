@@ -1,11 +1,11 @@
-#requires -version 5.1
+﻿#requires -version 5.1
 
 <#
 .SYNOPSIS
   Get software installed on the PC.
 
 .DESCRIPTION
-  Goes through the registries (machine & user), files and APPX packages and tries to find software based on parameter input.
+  Goes through the registries (machine & user), files and APPX packages and tries to find software based on variable input.
 
 .NOTES
   Version:        1.0
@@ -17,28 +17,20 @@
 #region begin boostrap
 ############### Bootstrap - Start ###############
 
-[cmdletbinding()]
-
-Param
-(
-    # Package id.
-    [Parameter(Mandatory=$true)][string]$Name = "Microsoft Teams",
-
-    # Version.
-    [Parameter(Mandatory=$true)][string]$Version = "1.5.00.17656",
-
-    # Method detection or requirement.
-    [Parameter(Mandatory=$false)][ValidateSet("Detection", "Requirement")][string]$Method = "Detection"
-)
-
-# Clear screen.
-#Clear-Host;
-
 ############### Bootstrap - End ###############
 #endregion
 
 #region begin input
 ############### Input - Start ###############
+
+# Name of the software.
+$Name = '[NAME]';
+
+# Version of the software.
+$Version = '[VERSION]';
+
+# Method detection or requirement.
+$Method = '[METHOD]';
 
 ############### Input - End ###############
 #endregion
@@ -482,17 +474,28 @@ Function Check-InstalledSoftware
     # Check if software is installed already.
     If($Installed = $InstalledSoftware | Where-Object {$_.Name -like "*$($Name)*"} | Sort-Object -Property Version -Descending)
     {
-        # If multiple entries exist.
-        If($Installed.Count -gt 1)
+        # Check if software is installed already.
+        If($Installed = $InstalledSoftware | Where-Object {$_.Name -like "*$($Name)*"} | Sort-Object -Property Version -Descending)
         {
-            # If exact match is found.
-            $Installed = $InstalledSoftware | Where-Object {$_.Name -like "$($Name)"} | Sort-Object -Property Version -Descending;
-            
             # If multiple entries exist.
             If($Installed.Count -gt 1)
             {
-                # Check if exact version is installed
-                $Installed = $Installed | Where-Object {$_.Version -eq $Version} | Select-Object -First 1;
+                # If match is found with wildcard in end.
+                $Installed = $InstalledSoftware | Where-Object {$_.Name -like "$($Name)*" -and $_.Version -like "$($Version)*"} | Sort-Object -Property Version -Descending;
+            
+                # If multiple entries exist.
+                If($Installed.Count -gt 1)
+                {
+                    # If exact match is found.
+                    $Installed = $InstalledSoftware | Where-Object {$_.Name -like "$($Name)"} | Sort-Object -Property Version -Descending;
+            
+                    # If multiple entries exist.
+                    If($Installed.Count -gt 1)
+                    {
+                        # Check if exact version is installed
+                        $Installed = $Installed | Where-Object {$_.Version -eq $Version} | Select-Object -First 1;
+                    }
+                }
             }
         }
 
@@ -509,7 +512,7 @@ Function Check-InstalledSoftware
         }
 
         # If version is the same.
-        If($InstalledVersion -eq $Version)
+        If(($InstalledVersion -eq $Version) -or ($InstalledVersion -like "$($Version)*"))
         {
             # Set status.
             $Status = "SameVersion";
