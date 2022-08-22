@@ -19,7 +19,7 @@
 ############### Bootstrap - Start ###############
 
 # Clear screen.
-Clear-Host;
+#Clear-Host;
 
 ############### Bootstrap - End ###############
 #endregion
