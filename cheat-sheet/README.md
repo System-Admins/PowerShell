@@ -3,11 +3,6 @@
 This page shows a examples and simple commands that can help you on the way with PowerShell scripts and modules.
 
 
-
-**Table of content**:
-
-[TOC]
-
 ## Version
 
 ### Convert string to type System.Version
