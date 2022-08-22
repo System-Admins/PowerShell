@@ -147,3 +147,31 @@ Function Replace-TextInFile
 } 
 ```
 
+## Session
+
+### Check if current session is interactive
+
+Check if the process is running in interactive (by user) or non-interactive (ex. a schedule task) mode.
+
+```powershell
+# Function to check if process is interactive.
+Function Test-InteractiveSession
+{
+    # Test each argument for match of abbreviated '-NonInteractive' command.
+    $NonInteractive = [Environment]::GetCommandLineArgs() | Where-Object{ $_ -like '-NonInteractive' };
+
+    # If environment is interactive and the argument -NonInteractive is not set.
+    If(([Environment]::UserInteractive) -and (-not $NonInteractive))
+    {
+        # Return false.
+        Return $false;
+    }
+    # Else if the session is non-interactive.
+    Else
+    {
+        # Return true.
+        Return $true;
+    }
+}
+```
+
