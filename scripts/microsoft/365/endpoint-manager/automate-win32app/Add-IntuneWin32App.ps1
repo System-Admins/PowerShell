@@ -1,4 +1,4 @@
-﻿#requires -version 5.1
+#requires -version 5.1
 
 <#
 .SYNOPSIS
@@ -37,10 +37,10 @@ Param
     [Parameter(Mandatory=$true)][string]$Version,
 
     # Package - Publisher.
-    [Parameter(Mandatory=$true)][string]$Publisher,
+    [Parameter(Mandatory=$true)][string]$Publisher = 'System Admins',
 
     # Package - Description.
-    [Parameter(Mandatory=$true)][string]$Description,
+    [Parameter(Mandatory=$false)][string]$Description = 'No description for this application, contact your administrator',
 
     # Package - Path to IntuneWin.
     [Parameter(Mandatory=$true)][string]$IntuneWinPath,
@@ -58,7 +58,10 @@ Param
     [Parameter(Mandatory=$true)][ValidateSet("system", "user")][string]$InstallExperience,
 
     # Package - Project URL.
-    [Parameter(Mandatory=$true)][string]$ProjectUrl
+    [Parameter(Mandatory=$false)][string]$ProjectUrl = 'N/A',
+
+    # Package - Icon path.
+    [Parameter(Mandatory=$true)][string]$IconPath
 )
 
 # Clear screen.
@@ -91,6 +94,7 @@ $Application = @{
     "Owner" = $Publisher;
     "PrivacyUrl" = $ProjectUrl;
     "RunAs32Bit" = $false; #or true;
+    "IconPath" = $IconPath;
 };
 
 ############### Input - End ###############
@@ -124,6 +128,33 @@ Function Write-Log
     {
         # Write to the console.
         Write-Host("[" + (Get-Date).ToString("dd/MM-yyyy HH:mm:ss") + "]: " + $Text);
+    }
+}
+
+# Convert file to base64.
+Function ConvertTo-Base64
+{
+    [cmdletbinding()]	
+		
+    Param
+    (
+        [Parameter(Mandatory=$true)][string]$Path
+    )
+
+    # If path is valid.
+    If(Test-Path -Path $Path)
+    {
+        # Write to log.
+        Write-Log ("Converting file '{0}' to BASE64" -f $Path);
+
+        # Get content.
+        $Content = [System.IO.File]::ReadAllBytes($Path);
+
+        # Convert to base64.
+        $Base64 = [Convert]::ToBase64String($Content);
+
+        # Return string.
+        Return $Base64;
     }
 }
 
@@ -406,27 +437,77 @@ Function New-IntuneWin32App
     Param
     (
         [Parameter(Mandatory=$true)]$ApiToken,
-        [Parameter(Mandatory=$true)][string]$Description,
-        [Parameter(Mandatory=$true)][string]$Developer,
+        [Parameter(Mandatory=$false)][string]$Description,
+        [Parameter(Mandatory=$false)][string]$Developer,
         [Parameter(Mandatory=$true)][string]$DisplayName,
         [Parameter(Mandatory=$true)][string]$DisplayVersion,
         [Parameter(Mandatory=$true)][string]$FileName,
         [Parameter(Mandatory=$true)][string]$InstallCmd,
         [Parameter(Mandatory=$true)][string]$UninstallCmd,
         [Parameter(Mandatory=$true)][string]$InstallExperience,
-        [Parameter(Mandatory=$true)][string]$InformationUrl,
+        [Parameter(Mandatory=$false)][string]$InformationUrl,
         [Parameter(Mandatory=$true)][bool]$IsFeatured,
         [Parameter(Mandatory=$true)][hashtable]$MinimumOs,
-        [Parameter(Mandatory=$true)][string]$Notes,
-        [Parameter(Mandatory=$true)][string]$Owner,
-        [Parameter(Mandatory=$true)][string]$PrivacyUrl,
-        [Parameter(Mandatory=$true)][string]$Publisher,
+        [Parameter(Mandatory=$false)][string]$Notes,
+        [Parameter(Mandatory=$false)][string]$Owner,
+        [Parameter(Mandatory=$false)][string]$PrivacyUrl,
+        [Parameter(Mandatory=$false)][string]$Publisher,
         [Parameter(Mandatory=$true)][bool]$RunAs32Bit,
         [Parameter(Mandatory=$true)][string]$SetupFileName,
+        [Parameter(Mandatory=$true)]$IconBase64,
         [Parameter(Mandatory=$true)]$DetectionRule,
         [Parameter(Mandatory=$false)]$RequirementScript,
         [Parameter(Mandatory=$true)]$ReturnCodes
     )
+
+    # If information url is empty.
+    If([string]::IsNullOrEmpty($InformationUrl))
+    {
+        # Add not available.
+        $InformationUrl = "https://www.systemadmins.com";
+    }
+
+    # If privacy url is empty.
+    If([string]::IsNullOrEmpty($PrivacyUrl))
+    {
+        # Add not available.
+        $PrivacyUrl = "https://www.systemadmins.com";
+    }
+
+    # If description is empty.
+    If([string]::IsNullOrEmpty($Description))
+    {
+        # Add not available.
+        $Description = "No description available, please contact your administrator.";
+    }
+
+    # If notes is empty.
+    If([string]::IsNullOrEmpty($Notes))
+    {
+        # Add not available.
+        $Notes = "This app was automated by System Admins";
+    }
+
+    # If developer is empty.
+    If([string]::IsNullOrEmpty($Developer))
+    {
+        # Add not available.
+        $Developer.License = "N/A";
+    }
+
+    # If publisher is empty.
+    If([string]::IsNullOrEmpty($Publisher))
+    {
+        # Add not available.
+        $Publisher = "N/A";
+    }
+
+    # If owner is empty.
+    If([string]::IsNullOrEmpty($Owner))
+    {
+        # Add not available.
+        $Owner = "N/A";
+    }
 
     # Create reqeust body.
     $Body = @{
@@ -447,11 +528,19 @@ Function New-IntuneWin32App
         'owner' = $Owner;
         'privacyInformationUrl' = $PrivacyUrl;
         'publisher' = $Publisher;
+        'largeIcon' = @{
+            '@odata.type' = '#microsoft.graph.mimeContent';
+            "type" = "image/png";
+            "value" = $IconBase64;
+        };
         'runAs32bit' = $RunAs32Bit;
         'setupFileName' = $SetupFileName;
         'detectionRules' = $DetectionRule;
         'returnCodes' = $ReturnCodes;
-    }
+    };
+
+    # Write to log.
+    Write-Log ("Icon Base64 is '{0}'" -f $IconBase64);
 
     # If requirement script is set.
     If(!([string]::IsNullOrEmpty($RequirementScript)))
@@ -842,10 +931,10 @@ Function Upload-IntuneWin32AppFile
             $RenewUri = ("https://graph.microsoft.com/beta/deviceAppManagement/mobileApps/{0}/microsoft.graph.win32LobApp/contentVersions/{1}/files/{2}/renewUpload" -f $AppId, $ContentVersionId, $FileId);
 
             # Renew upload SAS token.
-            Renew-IntuneUploadSasToken -ApiToken $ApiToken -Uri $Uri;
+            Renew-IntuneUploadSasToken -ApiToken $ApiToken -Uri $RenewUri;
 
             # Restart timer.
-			$SasRenewalTimer.Restart();	
+            $SasRenewalTimer.Restart();	
         }
     }
 
@@ -971,6 +1060,9 @@ Function Add-IntuneWin32App
                             -EnforceSignatureCheck $Application.EnforceSignatureCheck `
                             -RunAs32Bit $Application.RunAs32Bit;
 
+    # Convert icon to base64.
+    $IconBase64 = ConvertTo-Base64 -Path $Application.IconPath;
+
     # Get default return codes.
     $ReturnCodes = Get-ReturnCodes;
 
@@ -1007,7 +1099,8 @@ Function Add-IntuneWin32App
                                          -SetupFileName $DetectionXml.ApplicationInfo.SetupFile `
                                          -DetectionRule @($DetectionRule) `
                                          -RequirementScript @($RequirementScript) `
-                                         -ReturnCodes $ReturnCodes;
+                                         -ReturnCodes $ReturnCodes `
+                                         -IconBase64 $IconBase64;
 
     # Create new content version for the Win32 client app in Intune.
     $IntuneWin32AppContentVersion = New-IntuneWin32AppContentVersion -ApiToken $ApiToken `
