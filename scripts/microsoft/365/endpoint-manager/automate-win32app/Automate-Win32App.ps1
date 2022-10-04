@@ -200,113 +200,204 @@ Function Automate-Win32App
     # Set location to script path.
     Set-Location -Path $ScriptPath;
 
-    # Download package.
-    $Package = .\Download-WinGetPackage.ps1 -PackageId $PackageId `
-                                            -Architecture $PackageArchitecture;
-
-    # Get all Win32 apps.
-    $Win32Apps = .\Get-IntuneWin32Apps.ps1 -AzureAdTenantId $AzureAdTenantId `
-                                           -AzureAdClientId $AzureAdClientId `
-                                           -AzureAdClientSecret $AzureAdClientSecret;
-
-    # Convert app to IntuneWin.
-    $IntuneWinFilePath = .\Run-IntuneWinAppUtil.ps1 -SourcePath $Package.SourceDirectoryPath `
-                                -SetupFile $Package.Installer.InstallerFileName;
-    
-    # Filename detection and requirement script.
-    $PackageDetectionScript = ('Detect-InstalledSoftware.ps1');
-
-    # Copy detection script.
-    $DetectionScriptPath = .\Copy-File.ps1 -SourceFile $PackageDetectionScript -DestinationFile ("{0}\{1}" -f $Package.SourceDirectoryPath, "Detect-Software.ps1") -FindReplace -ReplaceTable @{'[NAME]' = $Package.Name; '[VERSION]' = $Package.Version; '[METHOD]' = 'Detection'};
-
-    # Copy requirement script.
-    $RequirementScriptPath = .\Copy-File.ps1 -SourceFile $PackageDetectionScript -DestinationFile ("{0}\{1}" -f $Package.SourceDirectoryPath, "Detect-Upgrade.ps1") -FindReplace -ReplaceTable @{'[NAME]' = $Package.Name; '[VERSION]' = $Package.Version; '[METHOD]' = 'Requirement'}
-
-    # If the app is already added.
-    If($Win32App = $Win32Apps | Where-Object {$_.DisplayName -eq $Package.DisplayName} | Select-Object -First 1)
+    # Try to download package.
+    Try
+    {
+        # Download package.
+        $Package = & .\Download-WinGetPackage.ps1 -PackageId $PackageId `
+                                                  -Architecture $PackageArchitecture;
+    }
+    Catch
     {
         # Write to log.
-        Write-Log ("Program '{0}' already present in Intune" -f $Package.DisplayName);
+        Write-Log ("Aborting script, due to issues downloading info and package through WinGet API");
 
-        # If version is the same.
-        If($Win32App.displayVersion -eq $Package.Version)
+        # Exit script.
+        Exit 1;
+    }
+
+    # Download software logo.
+    $IconPath = & .\Get-SoftwareLogo.ps1 -PackageId $PackageId `
+                                         -ProjectUrl $Package.ProjectUrl `
+                                         -OutputPath $Package.SourceDirectoryPath;
+
+    # If software logo is not OK, use default.
+    If(!(Test-Path -Path $IconPath -ErrorAction SilentlyContinue))
+    {
+        # Use default.
+        $IconPath = ("icon.png");
+    }
+
+
+    # Get all Win32 apps.
+    $Win32Apps = & .\Get-IntuneWin32Apps.ps1 -AzureAdTenantId $AzureAdTenantId `
+                                             -AzureAdClientId $AzureAdClientId `
+                                             -AzureAdClientSecret $AzureAdClientSecret;
+
+    # Convert app to IntuneWin.
+    $IntuneWinFilePath = & .\Run-IntuneWinAppUtil.ps1 -SourcePath $Package.SourceDirectoryPath `
+                                -SetupFile $Package.Installer.InstallerFileName;
+
+    # If source binary (software) path exist.
+    If(Test-Path -Path $Package.SourceDirectoryPath)
+    {
+        # Filename detection and requirement script.
+        $PackageDetectionScript = ('Detect-InstalledSoftware.ps1');
+
+        # If there is a custom display name.
+        If($Package.Installer.CustomDisplayName)
+        {
+            # Detection name.
+            $DetectName = $Package.Installer.CustomDisplayName;
+
+            # Write to log.
+            Write-Log ("Using custom display name '{0}' for detection and requirement script" -f $DetectName);
+        }
+        # Else use normal name.
+        Else
+        {
+            # Detection name.
+            $DetectName = $Package.Name;
+
+            # Write to log.
+            Write-Log ("No custom display name, using '{0}' for detection and requirement script" -f $DetectName);
+        }
+
+        # If there is a custom display version.
+        If($Package.Installer.CustomDisplayVersion)
+        {
+            # Detection name.
+            $DetectVersion = $Package.Installer.CustomDisplayVersion;
+
+            # Write to log.
+            Write-Log ("Using custom display version '{0}' for detection and requirement script" -f $DetectVersion);
+        }
+        # Else use normal name.
+        Else
+        {
+            # Detection name.
+            $DetectVersion = $Package.Version;
+
+            # Write to log.
+            Write-Log ("No custom display version, using '{0}' for detection and requirement script" -f $DetectVersion);
+        }
+
+        # Copy detection script.
+        $DetectionScriptPath = & .\Copy-File.ps1 -SourceFile $PackageDetectionScript -DestinationFile ("{0}\{1}" -f $Package.SourceDirectoryPath, "Detect-Software.ps1") -FindReplace -ReplaceTable @{'[NAME]' = $DetectName; '[VERSION]' = $DetectVersion; '[METHOD]' = 'Detection'};
+
+        # Copy requirement script.
+        $RequirementScriptPath = & .\Copy-File.ps1 -SourceFile $PackageDetectionScript -DestinationFile ("{0}\{1}" -f $Package.SourceDirectoryPath, "Detect-Upgrade.ps1") -FindReplace -ReplaceTable @{'[NAME]' = $DetectName; '[VERSION]' = $DetectVersion; '[METHOD]' = 'Requirement'}
+
+        # If the app is already added.
+        If($Win32App = $Win32Apps | Where-Object {$_.DisplayName -eq $Package.DisplayName} | Select-Object -First 1)
         {
             # Write to log.
-            Write-Log ("Program version '{0}' is the same, skipping upload" -f $Package.Version);
+            Write-Log ("Program '{0}' already present in Intune" -f $Package.DisplayName);
+
+            # If version is the same.
+            If($Win32App.displayVersion -eq $Package.Version)
+            {
+                # Write to log.
+                Write-Log ("Program version '{0}' is the same, skipping upload" -f $Package.Version);
+            }
+            # Else the version is not the same.
+            Else
+            {
+                # Write to log.
+                Write-Log ("Program version '{0}' is not the same, will update package" -f $Package.Version);
+
+                # Replace Win32 app.
+                $IntuneApp = & .\Replace-IntuneWin32App.ps1 -ApiToken $ApiToken `
+                                                            -IntuneAppId $Win32App.Id `
+                                                            -Name ($Package.DisplayName) `
+                                                            -Version $Package.Version `
+                                                            -Publisher $Package.Publisher `
+                                                            -Description $Package.Description `
+                                                            -IntuneWinPath $IntuneWinFilePath `
+                                                            -DetectionScriptPath $DetectionScriptPath `
+                                                            -InstallCmd $Package.Installer.InstallerCmdLine `
+                                                            -InstallExperience $Package.Installer.Scope `
+                                                            -ProjectUrl $Package.ProjectUrl `
+                                                            -IconPath $IconPath;
+            }
         }
-        # Else the version is not the same.
+        # Else app is not added.
         Else
         {
             # Write to log.
-            Write-Log ("Program version '{0}' is not the same, will update package" -f $Package.Version);
+            Write-Log ("Program '{0}' version '{1}' is not present in Intune, will upload the application" -f $Package.DisplayName, $Package.Version);
+
+            # Add new Win32 app.
+            $IntuneApp = & .\Add-IntuneWin32App.ps1 -ApiToken $ApiToken `
+                                                    -Name ($Package.DisplayName) `
+                                                    -Version $Package.Version `
+                                                    -Publisher $Package.Publisher `
+                                                    -Description $Package.Description `
+                                                    -IntuneWinPath $IntuneWinFilePath `
+                                                    -DetectionScriptPath $DetectionScriptPath `
+                                                    -InstallCmd $Package.Installer.InstallerCmdLine `
+                                                    -InstallExperience $Package.Installer.Scope `
+                                                    -ProjectUrl $Package.ProjectUrl `
+                                                    -IconPath $IconPath;
+        }
+
+        # Write to log.
+        Write-Log ("Waiting 5 seconds for Azure Blob storage to be ready");   
+
+        # Start sleep for upload issues regarding Azure Blob storage.
+        Start-Sleep -Seconds 5;
+
+        # Construct update app for the same app.
+        $UpdateAppName = ("{0} - Update" -f $Package.DisplayName);
+
+        # If the update app is already added.
+        If($Win32UpdateApp = $Win32Apps | Where-Object {$_.DisplayName -eq $UpdateAppName} | Select-Object -First 1)
+        {
+            # Write to log.
+            Write-Log ("Updating existing '{0}' update program in Intune" -f $UpdateAppName);
 
             # Replace Win32 app.
-            $IntuneApp = .\Replace-IntuneWin32App.ps1 -ApiToken $ApiToken `
-                                                      -IntuneAppId $Win32App.Id `
-                                                      -Name ($Package.DisplayName) `
-                                                      -Version $Package.Version `
-                                                      -Publisher $Package.Publisher `
-                                                      -Description $Package.Description `
-                                                      -IntuneWinPath $IntuneWinFilePath `
-                                                      -DetectionScriptPath $DetectionScriptPath `
-                                                      -InstallCmd $Package.Installer.InstallerCmdLine `
-                                                      -InstallExperience $Package.Installer.Scope `
-                                                      -ProjectUrl $Package.ProjectUrl;
+            $IntuneApp = & .\Replace-IntuneWin32App.ps1 -ApiToken $ApiToken `
+                                                        -IntuneAppId $Win32UpdateApp.Id `
+                                                        -Name ($UpdateAppName) `
+                                                        -Version $Package.Version `
+                                                        -Publisher $Package.Publisher `
+                                                        -Description $Package.Description `
+                                                        -IntuneWinPath $IntuneWinFilePath `
+                                                        -DetectionScriptPath $DetectionScriptPath `
+                                                        -InstallCmd $Package.Installer.InstallerCmdLine `
+                                                        -InstallExperience $Package.Installer.Scope `
+                                                        -ProjectUrl $Package.ProjectUrl `
+                                                        -IconPath $IconPath;
         }
+        # Else update app dont exist.
+        Else
+        {
+            # Write to log.
+            Write-Log ("Update program '{0}' version '{1}' is not present in Intune, will upload the application" -f $Package.DisplayName, $Package.Version); 
+
+            # Add new Win32 app.
+            $IntuneUpdateApp = & .\Add-IntuneWin32App.ps1 -ApiToken $ApiToken `
+                                                          -Name $UpdateAppName `
+                                                          -Version $Package.Version `
+                                                          -Publisher $Package.Publisher `
+                                                          -Description $Package.Description `
+                                                          -IntuneWinPath $IntuneWinFilePath `
+                                                          -DetectionScriptPath $DetectionScriptPath `
+                                                          -RequirementScriptPath $RequirementScriptPath `
+                                                          -InstallCmd $Package.Installer.InstallerCmdLine `
+                                                          -InstallExperience $Package.Installer.Scope `
+                                                          -ProjectUrl $Package.ProjectUrl `
+                                                          -IconPath $IconPath;
+        }   
     }
-    # Else app is not added.
+    # Else source binary (software) dont exist.
     Else
     {
         # Write to log.
-        Write-Log ("Program '{0}' version '{1}' is not present in Intune, will upload the application" -f $Package.DisplayName, $Package.Version);
-
-        # Add new Win32 app.
-        $IntuneApp = .\Add-IntuneWin32App.ps1 -ApiToken $ApiToken `
-                                              -Name ($Package.DisplayName) `
-                                              -Version $Package.Version `
-                                              -Publisher $Package.Publisher `
-                                              -Description $Package.Description `
-                                              -IntuneWinPath $IntuneWinFilePath `
-                                              -DetectionScriptPath $DetectionScriptPath `
-                                              -InstallCmd $Package.Installer.InstallerCmdLine `
-                                              -InstallExperience $Package.Installer.Scope `
-                                              -ProjectUrl $Package.ProjectUrl;
+        Write-Log ("Package directory path '{0}' dont exist" -f $Package.SourceDirectoryPath);
     }
-
-    # Write to log.
-    Write-Log ("Waiting 5 seconds for Azure Blob storage to be ready");   
-
-    # Start sleep for upload issues regarding Azure Blob storage.
-    Start-Sleep -Seconds 5;
-
-    # Construct update app for the same app.
-    $UpdateAppName = ("{0} - Update" -f $Package.DisplayName);
-
-    # If the update app is already added.
-    If($Win32UpdateApp = $Win32Apps | Where-Object {$_.DisplayName -eq $UpdateAppName} | Select-Object -First 1)
-    {
-        # Write to log.
-        Write-Log ("Removing existing '{0}' program in Intune" -f $UpdateAppName);
-
-        # Remove app.
-        .\Remove-IntuneWin32App.ps1 -ApiToken $ApiToken -IntuneAppId $Win32UpdateApp.Id;
-    }
-
-    # Write to log.
-    Write-Log ("Update program '{0}' version '{1}' is not present in Intune, will upload the application" -f $Package.DisplayName, $Package.Version);    
-
-    # Add new Win32 app.
-    $IntuneUpdateApp = .\Add-IntuneWin32App.ps1 -ApiToken $ApiToken `
-                                                -Name $UpdateAppName `
-                                                -Version $Package.Version `
-                                                -Publisher $Package.Publisher `
-                                                -Description $Package.Description `
-                                                -IntuneWinPath $IntuneWinFilePath `
-                                                -DetectionScriptPath $DetectionScriptPath `
-                                                -RequirementScriptPath $RequirementScriptPath `
-                                                -InstallCmd $Package.Installer.InstallerCmdLine `
-                                                -InstallExperience $Package.Installer.Scope `
-                                                -ProjectUrl $Package.ProjectUrl;
+    
 
     # Write to log.
     Write-Log ("Package automation (script) finished");
