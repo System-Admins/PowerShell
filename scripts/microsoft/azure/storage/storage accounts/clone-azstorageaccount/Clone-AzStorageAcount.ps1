@@ -342,8 +342,8 @@ Function Copy-AzStorageAccountData
     )
 
     # Create argument.
-    $AzCopyBlobArgument = ('copy "https://{0}.blob.core.windows.net/{1}" "https://{2}.blob.core.windows.net{3}" --recursive --log-level ERROR' -f $SourceAccountName, $SourceSasToken, $TargetAccountName, $TargetSasToken);
-    $AzCopyFileArgument = ('copy "https://{0}.file.core.windows.net/{1}" "https://{2}.file.core.windows.net{3}" --recursive --log-level ERROR' -f $SourceAccountName, $SourceSasToken, $TargetAccountName, $TargetSasToken);
+    $AzCopyBlobArgument = ('copy "https://{0}.blob.core.windows.net/{1}" "https://{2}.blob.core.windows.net/{3}" --recursive --log-level ERROR' -f $SourceAccountName, $SourceSasToken, $TargetAccountName, $TargetSasToken);
+    $AzCopyFileArgument = ('copy "https://{0}.file.core.windows.net/{1}" "https://{2}.file.core.windows.net/{3}" --recursive --log-level ERROR' -f $SourceAccountName, $SourceSasToken, $TargetAccountName, $TargetSasToken);
 
     # Write to log.
     Write-Log ("Starting copy from '{0}.blob.core.windows.net' to '{1}.blob.core.windows.net'" -f $SourceAccountName, $TargetAccountName);
@@ -398,7 +398,7 @@ Function Clone-AzStorageAccount
     $AzSubscription = (Get-AzContext).Subscription;
 
     # Get public IP.
-    $PublicIp = Get-PublicIpAddress;
+    $PublicIp = "0.0.0.0/0" #Get-PublicIpAddress;
 
     # Path to config file.
     $ConfigFilePath = ("{0}\clone.config" -f $TemplatePath);
@@ -447,6 +447,9 @@ Function Clone-AzStorageAccount
             # Add firewall rule.
             Add-AzStorageAccountNetworkRule -ResourceGroupName $ResourceGroupName -Name $StorageAcccountName -IPAddressOrRange $PublicIp -ErrorAction SilentlyContinue | Out-Null;
 
+            # Wait a few seconds.
+            Start-Sleep -Seconds 10;
+
             # If data need to be migrated.
             If($CopyData)
             {
@@ -460,7 +463,7 @@ Function Clone-AzStorageAccount
                     $StorageAccountContext = (Get-AzStorageAccount -ResourceGroupName $StorageAccount.ResourceGroupName -AccountName $StorageAccount.Name -ErrorAction Stop).Context;
 
                     # Create SAS-token.
-                    $SasToken = New-AzStorageAccountSASToken -Context $StorageAccountContext -Service Blob,File,Table,Queue -ResourceType Service,Container,Object -Permission "racwdlup" -ExpiryTime (Get-Date).AddDays(2) -ErrorAction Stop;
+                    $SasToken = New-AzStorageAccountSASToken -Context $StorageAccountContext -Service Blob,File,Table,Queue -ResourceType Service,Container,Object -Permission "racwdlup" -StartTime ([System.DateTime]::UtcNow) -ExpiryTime ([System.DateTime]::UtcNow).AddDays(2) -ErrorAction Stop;
 
                     # Write to log.
                     Write-Log ("Successfully created SAS token for storage account '{0}'" -f $StorageAccount.Name);
@@ -526,7 +529,7 @@ Function Clone-AzStorageAccount
                     Write-Log ("Trying to create storage account '{0}' in resource group '{1}'" -f $StorageAcccountName, $ResourceGroupName);
                     
                     # Create storage account.
-                    New-AzResourceGroupDeployment -Name $StorageAcccountName -ResourceGroupName $ResourceGroupName -Mode Incremental -TemplateFile $Config.ArmTemplateFilePath -SkipTemplateParameterPrompt -ErrorAction Stop;
+                    New-AzResourceGroupDeployment -Name $StorageAcccountName -ResourceGroupName $ResourceGroupName -Mode Incremental -TemplateFile $Config.ArmTemplateFilePath -SkipTemplateParameterPrompt -ErrorAction Stop | Out-Null;
 
                     # Write to log.
                     Write-Log ("Successfully created storage account '{0}' in resource group '{1}'" -f $StorageAcccountName, $ResourceGroupName);
@@ -554,6 +557,9 @@ Function Clone-AzStorageAccount
             # Add firewall rule.
             Add-AzStorageAccountNetworkRule -ResourceGroupName $ResourceGroupName -Name $StorageAcccountName -IPAddressOrRange $PublicIp -ErrorAction SilentlyContinue | Out-Null;
 
+            # Wait a few seconds.
+            Start-Sleep -Seconds 10;
+
             # If data need to be migrated.
             If($CopyData)
             {
@@ -573,7 +579,7 @@ Function Clone-AzStorageAccount
                         $StorageAccountContext = (Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -AccountName $StorageAcccountName -ErrorAction Stop).Context;
 
                         # Create SAS-token.
-                        $SasToken = New-AzStorageAccountSASToken -Context $StorageAccountContext -Service Blob,File,Table,Queue -ResourceType Service,Container,Object -Permission "racwdlup" -ExpiryTime (Get-Date).AddDays(2) -ErrorAction Stop;
+                        $SasToken = New-AzStorageAccountSASToken -Context $StorageAccountContext -Service Blob,File,Table,Queue -ResourceType Service,Container,Object -Permission "racwdlup" -StartTime ([System.DateTime]::UtcNow) -ExpiryTime ([System.DateTime]::UtcNow).AddDays(2) -ErrorAction Stop;
 
                         # Write to log.
                         Write-Log ("Successfully created SAS token for storage account '{0}'" -f $StorageAcccountName);
