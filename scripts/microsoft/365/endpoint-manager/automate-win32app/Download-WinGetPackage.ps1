@@ -1,4 +1,4 @@
-﻿#requires -version 5.1
+#requires -version 5.1
 
 <#
 .SYNOPSIS
@@ -220,6 +220,7 @@ Function Get-WinGetRepo
             # Write to log.
             Write-Log ("Something went wrong while getting SHA from '{0}', here is the error" -f $Master);
             Write-Host ($Error[0]);
+            Throw ($Error[0]);
 
             # Exit.
             Exit 1;
@@ -252,6 +253,7 @@ Function Get-WinGetRepo
             # Write to log.
             Write-Log ("Something went wrong while getting root folders from '{0}', here is the error" -f $Master);
             Write-Host ($Error[0]);
+            Throw ($Error[0]);
 
             # Exit.
             Exit 1;
@@ -297,6 +299,7 @@ Function Get-WinGetRepo
                 # Write to log.
                 Write-Log ("Something went wrong while getting sub folders from '{0}', here is the error" -f $SubFoldersUrl);
                 Write-Host ($Error[0]);
+                Throw ($Error[0]);
 
                 # Exit.
                 Exit 1;
@@ -653,6 +656,41 @@ Function Get-PackageDetails
         # If manifest is default locale or singleton.
         If($Manifest.ManifestType -eq "defaultLocale" -or $Manifest.ManifestType -eq "singleton")
         {
+            # If project url is empty.
+            If([string]::IsNullOrEmpty($Manifest.Resource.PackageUrl))
+            {
+                # Add not available.
+                $Package.ProjectUrl = "N/A";
+            }
+
+            # If description is empty.
+            If([string]::IsNullOrEmpty($Manifest.Resource.ShortDescription))
+            {
+                # Add not available.
+                $Manifest.Resource.ShortDescription = "N/A";
+            }
+
+            # If license is empty.
+            If([string]::IsNullOrEmpty($Package.License))
+            {
+                # Add not available.
+                $Package.License = "N/A";
+            }
+
+            # If locale is empty.
+            If([string]::IsNullOrEmpty($Manifest.Resource.PackageLocale))
+            {
+                # Add not available.
+                $Package.License = "N/A";
+            }
+
+            # If publisher is empty.
+            If([string]::IsNullOrEmpty($Manifest.Resource.Publisher))
+            {
+                # Add not available.
+                $Manifest.Resource.Publisher = "N/A";
+            }
+
             # Add to object.
             $Package.Name = $Manifest.Resource.PackageName;
             $Package.Version = [string]$Manifest.Resource.PackageVersion;
@@ -686,7 +724,7 @@ Function Get-PackageInstallerSwitches
     If($InstallerType -eq "msi" -or $InstallerType -eq "wix")
     {
         # Install switch.
-        $InstallSwitch = ('msiexec /i {0} /qn' -f $Executable);
+        $InstallSwitch = ('msiexec /i "{0}" /qn' -f $Executable);
     }
     # MSIX or AppX.
     If($InstallerType -eq "msix" -or $InstallerType -eq "appx")
@@ -698,19 +736,25 @@ Function Get-PackageInstallerSwitches
     ElseIf($InstallerType -eq "inno")
     {
         # Install switch.
-        $InstallSwitch = ('{0} /FORCECLOSEAPPLICATIONS /VERYSILENT /SP- /NOCANCEL /NORESTART /RESTARTAPPLICATIONS' -f $Executable);
+        $InstallSwitch = ('"{0}" /FORCECLOSEAPPLICATIONS /VERYSILENT /SP- /NOCANCEL /NORESTART /RESTARTAPPLICATIONS' -f $Executable);
     }
     # Nullsoft.
     ElseIf($InstallerType -eq "nullsoft")
     {
         # Install switch.
-        $InstallSwitch = ('{0} /S' -f $Executable);
+        $InstallSwitch = ('"{0}" /S' -f $Executable);
+    }
+    # Wix Burn.
+    ElseIf($InstallerType -eq "burn")
+    {
+        # Install switch.
+        $InstallSwitch = ('"{0}" /quiet /norestart' -f $Executable);
     }
     # Exe.
     ElseIf($InstallerType -eq "exe")
     {
         # Install switch.
-        $InstallSwitch = ('{0} /S' -f $Executable);
+        $InstallSwitch = ('"{0}" /S' -f $Executable);
     }
 
     # Return installer switch.
@@ -893,6 +937,12 @@ Function Get-PackageInstallers
                     $Scope = "user";   
                 }
             }
+            # Else no scope.
+            Else
+            {
+                # Set variable.
+                $Scope = "system";
+            }
 
             # Check if there is a custom switch.
             If($Installer.InstallerSwitches.PSobject.Properties.name -match 'Silent')
@@ -905,6 +955,44 @@ Function Get-PackageInstallers
             {
                 # Set variable.
                 $InstallerSwitchSilent = $Manifest.Resource.InstallerSwitches.Silent;
+            }
+
+            # Check if there is a custom apps and features entry.
+            If($Installer.AppsAndFeaturesEntries.DisplayName)
+            {
+                # Set variable.
+                $CustomDisplayName = $Installer.AppsAndFeaturesEntries.DisplayName;
+            }
+            # Else if the custom apps and features entry is at root level.
+            ElseIf($Manifest.Resource.AppsAndFeaturesEntries.DisplayName)
+            {
+                # Set variable.
+                $CustomDisplayName = $Manifest.Resource.AppsAndFeaturesEntries.DisplayName;
+            }
+            # No custom name.
+            Else
+            {
+                # Set variable.
+                $CustomDisplayName = "";
+            }
+
+            # Check if there is a custom apps and features entry.
+            If($Installer.AppsAndFeaturesEntries.DisplayName)
+            {
+                # Set variable.
+                $CustomDisplayVersion = $Installer.AppsAndFeaturesEntries.DisplayVersion;
+            }
+            # Else if the custom apps and features entry is at root level.
+            ElseIf($Manifest.Resource.AppsAndFeaturesEntries.DisplayName)
+            {
+                # Set variable.
+                $CustomDisplayVersion = $Manifest.Resource.AppsAndFeaturesEntries.DisplayVersion;
+            }
+            # No custom version.
+            Else
+            {
+                # Set variable.
+                $CustomDisplayVersion = "";
             }
 
             # If installer type is set.
@@ -944,6 +1032,8 @@ Function Get-PackageInstallers
                 InstallerLocale = $InstallerLocale;
                 InstallerCmdLine = $InstallerCmdLine;
                 Scope = $Scope;
+                CustomDisplayName = $CustomDisplayName;
+                CustomDisplayVersion = $CustomDisplayVersion;
             };
         }
     }
@@ -1043,7 +1133,7 @@ Function Export-PackageInfo
 }
 
 # Download installation file.
-Function Download-InstallFile
+Function Download-InstallationFile
 {
     [cmdletbinding()]	
 		
@@ -1122,10 +1212,10 @@ Function Download-WinGetPackage
     Param
     (
         # Package id.
-        [Parameter(Mandatory=$false)][string]$PackageId = "Zoom.Zoom",
+        [Parameter(Mandatory=$false)][string]$PackageId,
 
         # Architecture (x86 or x64).
-        [Parameter(Mandatory=$false)][ValidateSet("x64", "x86")][string]$Architecture = "x64",
+        [Parameter(Mandatory=$false)][ValidateSet("x64", "x86")][string]$Architecture,
 
         # Version.
         [Parameter(Mandatory=$false)][string]$Version,
@@ -1184,7 +1274,7 @@ Function Download-WinGetPackage
     $JsonTemplateFilePath = Export-PackageInfo -Package $Package -FolderPath $OutputPath;
 
     # Download install file.
-    $InstallFilePath = Download-InstallFile -Package $Package -FolderPath $OutputPath;
+    $InstallFilePath = Download-InstallationFile -Package $Package -FolderPath $OutputPath;
 
     # Add to object.
     $Package | Add-Member -MemberType NoteProperty -Name "JsonTemplate" -Value ($JsonTemplateFilePath) -Force;
