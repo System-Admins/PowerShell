@@ -1,4 +1,4 @@
-﻿#requires -version 5.1
+#requires -version 5.1
 
 <#
 .SYNOPSIS
@@ -499,11 +499,28 @@ Function Check-InstalledSoftware
             }
         }
 
+        # If version is set.
+        If(!([string]::IsNullOrEmpty($Version)))
+        {
+            # Convert to System.Version type.
+            $Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
+        }
+
         # Convert version.
         If($Installed.Version)
         {
-            # Convert to version type.
-            $InstalledVersion = [System.Version]::Parse(($Installed.Version -replace "([^0-9])", "."));
+            # Try to convert the version.
+            Try
+            {
+                # Convert to version type.
+                $InstalledVersion = [System.Version]::Parse(($Installed.Version -replace "([^0-9])", "."));
+            }
+            # Use string version
+            Catch
+            {
+                # Use string version.
+                $InstalledVersion = $Installed.Version;
+            }
         }
         Else
         {
@@ -630,13 +647,6 @@ Function Detect-InstalledSoftware
 
     # Get latest version if multiple versions are installed of the same software.
     $InstalledSoftware = Get-LatestInstalledSoftware -InstalledSoftware $InstalledSoftware;
-
-    # If version is set.
-    If(!([string]::IsNullOrEmpty($Version)))
-    {
-        # Convert to System.Version type.
-        $Version = [System.Version]::Parse(($Version -replace "([^0-9])", "."));
-    }
 
     # Chek installed software for criteria.
     $Response = Check-InstalledSoftware -Name $Name -Version $Version -InstalledSoftware $InstalledSoftware;
