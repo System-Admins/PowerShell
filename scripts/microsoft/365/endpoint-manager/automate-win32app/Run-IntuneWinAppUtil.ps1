@@ -1,4 +1,4 @@
-﻿#requires -version 5.1
+#requires -version 5.1
 
 <#
 .SYNOPSIS
@@ -221,6 +221,29 @@ Function Run-IntuneWinAppUtil
 
     # Wrap install directory with the content prep tool.
     $IntuneWinFilePath = Invoke-ContentPrepTool -ToolPath $ToolPath -SourcePath $SourcePath -SetupFile $SetupFile -OutputPath $OutputPath;
+
+    # If source path dont exist.
+    If(!(Test-Path -Path $SourcePath))
+    {
+        # Write to log.
+        Write-Log ("The source path '{0}' of the software don't exist for IntuneWinAppUtil to compress, aborting" -f $SourcePath);
+
+        # Throw error.
+        Throw ("The source path '{0}' of the software don't exist for IntuneWinAppUtil to compress, aborting" -f $SourcePath);
+
+        # Exit.
+        Exit 1;
+    }
+
+    # If output path dont exist.
+    If(!(Test-Path -Path $OutputPath))
+    {
+        # Write to log.
+        Write-Log ("The output path '{0}' for the IntuneWin dont exist, will create it now" -f $OutputPath);
+
+        # Create folder.
+        New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null;
+    }
 
     # Return file path for intunewin file.
     Return $IntuneWinFilePath;
