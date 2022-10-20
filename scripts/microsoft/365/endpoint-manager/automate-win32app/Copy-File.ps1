@@ -2,10 +2,10 @@
 
 <#
 .SYNOPSIS
-  Get software installed on the PC.
+  Copy file and optionally replace content inside the (text) file.
 
 .DESCRIPTION
-  Goes through the registries (machine & user), files and APPX packages and tries to find software based on parameter input.
+  This script copies a file and optionally replace the content if it's a text file.
 
 .NOTES
   Version:        1.0
