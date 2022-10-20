@@ -6,7 +6,7 @@
   Download GitHub repository to local filesystem without the Git client.
 
 .DESCRIPTION
-  This script downloads GitHub repository to local filesystem.
+  This script downloads GitHub repository to the local filesystem.
 
 .EXAMPLE
   .\Download-GitHubRepository.ps1 -GitHubUrl "https://github.com/system-admins/PowerShell" -Branch "main"
