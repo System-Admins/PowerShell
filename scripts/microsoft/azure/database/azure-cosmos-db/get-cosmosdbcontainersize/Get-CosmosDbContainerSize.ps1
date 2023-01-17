@@ -236,8 +236,10 @@ Foreach ($CosmosDbDatabase in $CosmosDbDatabases)
     # Foreach container.
     Foreach ($CosmosDbContainer in $CosmosDbContainers)
     {
-        # Get container size.
+        # Write to log.
         Write-Log ("Getting container size from [{0}][{1}][{2}][{3}]" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name, $CosmosDbDatabase.Name, $CosmosDbContainer.Name);
+
+        # Get container size.
         $ContainerSizeInfo = Get-CosmosDbContainerSize -EndpointUri $CosmosDbAccountDocumentEndpoint -MasterKey $CosmosDbAccountMasterKey -DatabaseName $CosmosDbDatabase.Name -CollectionName $CosmosDbContainer.Name;
 
         # Add to object array.
