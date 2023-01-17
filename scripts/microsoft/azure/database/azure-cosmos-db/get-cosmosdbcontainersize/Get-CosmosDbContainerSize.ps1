@@ -12,6 +12,7 @@
 
 .DESCRIPTION
   Uses Cosmos DB REST api and PowerShell cmdlet to gather container size and documents count.
+  It will export the info to an CSV file on the desktop.
 
 .NOTES
   Version:        1.0
