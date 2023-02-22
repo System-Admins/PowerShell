@@ -22,6 +22,9 @@
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
   Creation Date:  22-02-2023
   Purpose/Change: Initial script development
+  
+.EXAMPLE
+  .\Set-CosmosDbThroughput.ps1 -AccountName "<Cosmos DB acocunt name>"
 #>
 
 #region begin boostrap
