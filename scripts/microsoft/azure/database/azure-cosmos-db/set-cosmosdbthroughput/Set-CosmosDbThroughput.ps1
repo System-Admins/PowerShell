@@ -301,6 +301,16 @@ function Get-CosmosDbThroughputInfo
     # Get all databases.
     $CosmosDbDatabases = Get-AzCosmosDBSqlDatabase -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name;
 
+    # If there is no databases.
+    if($null -eq $CosmosDbDatabases)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] No databases found in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
+
+        # Return null.
+        return $null;
+    }
+
     # Write to log.
     Write-Log ("[{0}][{1}] Getting offers in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
 
@@ -357,16 +367,22 @@ function Get-CosmosDbThroughputInfo
             }
 
             # If autoscale is enabled.
-            if ($null -ne $ThroughputSettings.AutoscaleSettings.MaxThroughput)
+            if ($ThroughputSettings.AutoscaleSettings.MaxThroughput -ne 0)
             {
                 # Autoscale is enabled.
                 [bool]$AutoscaleEnabled = $true;
+
+                # Max throughput.
+                $MaxThroughput = $ThroughputSettings.AutoscaleSettings.MaxThroughput;
             }
             # Else autoscale is not enabled
             else
             {
                 # Autoscale is disabled.
                 [bool]$AutoscaleEnabled = $false;
+
+                # Max throughput.
+                $MaxThroughput = $ThroughputSettings.Throughput;
             }
 
             # Get offer from throughput.
@@ -385,7 +401,7 @@ function Get-CosmosDbThroughputInfo
                 "MinimumThroughput"            = $ThroughputSettings.Throughput;
                 "MinimumThroughputPossible"    = $ThroughputSettings.MinimumThroughput;
                 "AutoscaleEnabled"             = $AutoscaleEnabled;
-                "MaxThroughput"                = $ThroughputSettings.AutoscaleSettings.MaxThroughput;
+                "MaxThroughput"                = $MaxThroughput;
                 "MaxThroughputEverProvisioned" = $Offer.content.offerMinimumThroughputParameters.maxThroughputEverProvisioned;
                 "MaxConsumedStorageEverInKB"   = $Offer.content.offerMinimumThroughputParameters.maxConsumedStorageEverInKB;
             };
@@ -485,7 +501,7 @@ foreach ($CosmosDbThroughput in $CosmosDbThroughputs)
     else
     {
         # Write to log.
-        Write-Log ("[{0}][{1}][{2}][{3}] Throughput value is already correct {4}, skipping" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.ContainerName, $CosmosDbThroughput.MinimumThroughputPossible);
+        Write-Log ("[{0}][{1}][{2}][{3}] Throughput value '{4}' is already correct, skipping" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.ContainerName, $CosmosDbThroughput.MinimumThroughputPossible);
     }
 }
 
@@ -494,6 +510,9 @@ foreach ($CosmosDbThroughput in $CosmosDbThroughputs)
 
 #region begin finalize
 ############### Finalize - Start ###############
+
+# Write to log.
+Write-Log ("Script finished at {0}" -f (Get-Date));
 
 ############### Finalize - End ###############
 #endregion
