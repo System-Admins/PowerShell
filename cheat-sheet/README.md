@@ -170,3 +170,146 @@ Function Test-InteractiveSession
 }
 ```
 
+## Network
+
+### Get subnet information from IP-address CIDR
+
+Get subnet mask, start/end IP and network ID from IP-address CIDR.
+
+```powershell
+# Get IP range from CIDR.
+function Get-IpRangeFromCidr
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true)][ValidatePattern('^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$')][string]$CIDR
+    )
+
+    # Split IP and subnet.
+    $IP = ($CIDR -split '\/')[0];
+
+    # Get subnet bits.
+    [int]$SubnetBits = ($CIDR -split '\/')[1];
+
+    # If subnet bits is less than 7 or higher than 30.
+    if ($SubnetBits -lt 7 -or $SubnetBits -gt 30)
+    {
+        # Throw execption.
+        throw ('The number following the / must be between 7 and 30');
+    }
+
+    # Split IP into different octects and for each one, figure out the binary with leading zeros and add to the total.
+    $Octets = $IP -split '\.';
+
+    # Create array for IP.
+    $IPInBinary = @();
+
+    # Foreach octet.
+    foreach ($Octet in $Octets)
+    {
+        # Convert to binary.
+        $OctetInBinary = [convert]::ToString($Octet, 2);
+
+        # Get length of binary string add leading zeros to make octet.
+        $OctetInBinary = ('0' * (8 - ($OctetInBinary).Length) + $OctetInBinary);
+
+        # Add to array .
+        $IPInBinary = $IPInBinary + $OctetInBinary;
+    }
+
+    # Join binary IP.
+    $IPInBinary = $IPInBinary -join '';
+
+    # Get network ID by subtracting subnet mask;
+    $HostBits = 32 - $SubnetBits;
+
+    # Get network ID in binary format.
+    $NetworkIDInBinary = $IPInBinary.Substring(0, $SubnetBits);
+
+    # Get host ID and get the first host ID by converting all 1s into 0s.
+    $HostIDInBinary = $IPInBinary.Substring($SubnetBits, $HostBits);
+    $HostIDInBinary = $HostIDInBinary -replace '1', '0';
+
+    # Work out all the host IDs in that subnet by cycling through $i from 1 up to max $HostIDInBinary (i.e. 1s stringed up to $HostBits).
+    $imax = [convert]::ToInt32(('1' * $HostBits), 2) - 1;
+
+    # Create array for all IP in subnet.
+    $IPs = @();
+    
+    # Next ID is first network ID converted to decimal plus $i then converted to binary.
+    for ($i = 1 ; $i -le $imax ; $i++)
+    {
+        # Convert to decimal and add $i.
+        $NextHostIDInDecimal = ([convert]::ToInt32($HostIDInBinary, 2) + $i);
+
+        # Convert back to binary.
+        $NextHostIDInBinary = [convert]::ToString($NextHostIDInDecimal, 2);
+
+        # Number of zeros to add.
+        $NoOfZerosToAdd = $HostIDInBinary.Length - $NextHostIDInBinary.Length;
+        $NextHostIDInBinary = ('0' * $NoOfZerosToAdd) + $NextHostIDInBinary;
+
+        # Work out next IP.
+        $NextIPInBinary = $NetworkIDInBinary + $NextHostIDInBinary;
+
+        # Array for the single IP in subnet.
+        $IP = @();
+
+        # Split into octets and separate by "." then join.
+        for ($x = 1 ; $x -le 4 ; $x++)
+        {
+            # Work out start character position.
+            $StartCharNumber = ($x - 1) * 8;
+
+            # Get octet in binary.
+            $IPOctetInBinary = $NextIPInBinary.Substring($StartCharNumber, 8);
+
+            # Convert octet into decimal.
+            $IPOctetInDecimal = [convert]::ToInt32($IPOctetInBinary, 2);
+
+            # Add octet to IP
+            $IP += $IPOctetInDecimal;
+        }
+
+        # Separate by "."
+        $IP = $IP -join '.';
+
+        # Add single IP to array.
+        $IPs += $IP;
+    }
+
+    # Parse IP address.
+    $ParsedIpAddress = [System.Net.IPAddress]::Parse(($CIDR -split '\/')[0]);
+
+    # Shit CIDR.
+    $Shift = 64 - ($CIDR -split '\/')[1];
+    
+    # Create empty subnet.
+    [System.Net.IpAddress]$Subnet = 0;
+
+    # If CIDR is not zero.
+    if (($CIDR -split '\/') -ne 0)
+    {
+        # Parse shift to subnet.
+        $Subnet = [System.Net.IpAddress]::HostToNetworkOrder([int64]::MaxValue -shl $Shift);
+    }
+
+    # Get subnet info.
+    [System.Net.IpAddress]$Network = $ParsedIpAddress.Address -band $Subnet.Address;
+
+    # Create object.
+    $Result = [PSCustomObject]@{
+        IpAddressCidr = $CIDR;
+        StartIp = $IPs[0];
+        EndIp = $IPs[-1];
+        NetworkId = $Network;
+        SubnetMask = $Subnet;
+        IpAvailable = $IPs;
+        HostAvailable = $IPs.count;
+    };
+
+    # Return result.
+    return $Result;
+}
+```
