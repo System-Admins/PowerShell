@@ -1,6 +1,6 @@
 # Variables.
 $ImpersonatedUser = "joe@contoso.com";
-$EwsUrl = "https://mail.weibel.dk/EWS/Exchange.asmx";
+$EwsUrl = "https://mail.contoso.dk/EWS/Exchange.asmx";
 $SearchStart = (Get-Date);
 $SearchEnd = (Get-Date).AddYears(1);
 
