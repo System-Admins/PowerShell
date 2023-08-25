@@ -33,7 +33,7 @@
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  25-08-2023
+  Creation Date:  25-01-2023
   Purpose/Change: Initial script development
 #>
 
@@ -97,20 +97,20 @@ function Write-Log
 Write-Log ("Script started at {0}" -f (Get-Date));
 
 # If local path dont exist.
-if(!(Test-Path -Path $FilePath -PathType Leaf))
+if (!(Test-Path -Path $FilePath -PathType Leaf))
 {
     # Throw execption.
-        throw ("File at '{0}' dont exist" -f $FilePath);
+    throw ("File at '{0}' dont exist" -f $FilePath);
 }
 
 # Get storage account resource.
 $AzResource = Get-AzResource -ResourceType 'Microsoft.Storage/storageAccounts' -Name $StorageAccountName -ErrorAction SilentlyContinue;
 
 # If the resource dont exist.
-if($null -eq $AzResource)
+if ($null -eq $AzResource)
 {
-        # Throw execption.
-        throw ("The storage account '{0}' dont exist" -f $StorageAccountName);
+    # Throw execption.
+    throw ("The storage account '{0}' dont exist" -f $StorageAccountName);
 }
 
 # Get file name.
@@ -123,14 +123,14 @@ $StorageAccount = Get-AzStorageAccount -ResourceGroupName $AzResource.ResourceGr
 $Container = Get-AzStorageContainer -Context ($StorageAccount).Context -Name $ContainerName -ErrorAction SilentlyContinue;
 
 # If the container dont exist.
-if($null -eq $Container)
+if ($null -eq $Container)
 {
-        # Throw execption.
-        throw ("The container '{0}' in storage account '{1}' dont exist" -f $ContainerName, $StorageAccount.StorageAccountName);
+    # Throw execption.
+    throw ("The container '{0}' in storage account '{1}' dont exist" -f $ContainerName, $StorageAccount.StorageAccountName);
 }
 
 # If target folder is not specified.
-if([string]::IsNullOrEmpty($TargetFolder))
+if ([string]::IsNullOrEmpty($TargetFolder))
 {
     # Set blob name.
     $BlobName = $FileName;
@@ -146,7 +146,7 @@ else
 $Blob = Get-AzStorageBlob -Container $Container.Name -Blob $BlobName -Context ($StorageAccount).Context -ErrorAction SilentlyContinue;
 
 # If blob exist.
-if($BlobType -eq "Append" -and $null -ne $Blob -and $Overwrite -eq $false)
+if ($BlobType -eq "Append" -and $null -ne $Blob -and $Overwrite -eq $false)
 {
     # Try to append blob.
     try
@@ -183,7 +183,7 @@ else
         Write-Log ("Trying to upload file '{0}' to storage account '{1}'" -f $FilePath, $StorageAccount.StorageAccountName);
 
         # If overwrite is enabled.
-        if($Overwrite)
+        if ($Overwrite)
         {
             # Write to log.
             Write-Log ("Will overwrite file '{0}' in storage account '{1}', if it exists" -f $BlobName, $StorageAccount.StorageAccountName);
