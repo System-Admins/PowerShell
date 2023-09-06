@@ -1,4 +1,4 @@
-﻿#requires -version 5.1
+#requires -version 5.1
 
 <#
 .SYNOPSIS
@@ -278,50 +278,50 @@ Function Remove-BloatAppxPackages
                 #Write-Log -NoDateTime -Text ($Error[0]);
             }
         }
+    }
 
-        # If the running context is admin.
-        If(Get-IsAdministrator)
-        {
-            # Search after package.
-            $ProvisionedPackages = $AppxProvisionedPackages | Where-Object {$_.DisplayName -like $AppxPackage};
+    # If the running context is admin.
+    If(Get-IsAdministrator)
+    {
+        # Search after package.
+        $ProvisionedPackages = $AppxProvisionedPackages | Where-Object {$_.DisplayName -like $AppxPackage};
             
-            # Write to log.
-            Write-Log ("Found {0} that matches '{1}' provisioned package" -f $ProvisionedPackages.Count, $AppxPackage);
+        # Write to log.
+        Write-Log ("Found {0} that matches '{1}' provisioned package" -f $ProvisionedPackages.Count, $AppxPackage);
 
-            # If packaged is found.
-            If($ProvisionedPackages)
+        # If packaged is found.
+        If($ProvisionedPackages)
+        {
+            # Foreach provisioned package.
+            Foreach($ProvisionedPackage in $ProvisionedPackages)
             {
-                # Foreach provisioned package.
-                Foreach($ProvisionedPackage in $ProvisionedPackages)
+                # Write to log.
+                Write-Log ("Found {0} provisioned packages that matches '{1}'" -f $AppxProvisionedPackages.Count, $AppxPackage);
+
+                # Foreach package that is provisioned for each user on the device.
+                Foreach($AppxProvisionedPackage in $AppxProvisionedPackages)
                 {
                     # Write to log.
-                    Write-Log ("Found {0} provisioned packages that matches '{1}'" -f $AppxProvisionedPackages.Count, $AppxPackage);
+                    Write-Log ("Trying to remove provisioned package '{0}'" -f $AppxProvisionedPackage.PackageName);
 
-                    # Foreach package that is provisioned for each user on the device.
-                    Foreach($AppxProvisionedPackage in $AppxProvisionedPackages)
+                    # Try to remove.
+                    Try
+                    {
+                        # Remove provisioned package.
+                        Remove-AppxProvisionedPackage -Online -PackageName $AppxProvisionedPackage.PackageName -ErrorAction Stop | Out-Null;
+                    
+                        # Write to log.
+                        Write-Log ("Removed provisioned package '{0}'" -f $AppxProvisionedPackage.PackageName);   
+                    }
+                    # Something went wrong while removing.
+                    Catch
                     {
                         # Write to log.
-                        Write-Log ("Trying to remove provisioned package '{0}'" -f $AppxProvisionedPackage.PackageName);
-
-                        # Try to remove.
-                        Try
-                        {
-                            # Remove provisioned package.
-                            Remove-AppxProvisionedPackage -Online -PackageName $AppxProvisionedPackage.PackageName -ErrorAction Stop | Out-Null;
-                    
-                            # Write to log.
-                            Write-Log ("Removed provisioned package '{0}'" -f $AppxProvisionedPackage.PackageName);   
-                        }
-                        # Something went wrong while removing.
-                        Catch
-                        {
-                            # Write to log.
-                            Write-Log ("Something went wrong while removing provisioned package '{0}', here is the error" -f $AppxProvisionedPackage.PackageName);
-                        }
+                        Write-Log ("Something went wrong while removing provisioned package '{0}', here is the error" -f $AppxProvisionedPackage.PackageName);
                     }
                 }
-                
             }
+                
         }
     }
 }
