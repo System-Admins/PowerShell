@@ -92,7 +92,8 @@ $AppxPackages = @(
     "*Disney*",
     "*getstarted*"
     "Microsoft.549981C3F5F10",
-    "Microsoft.Todos"
+    "Microsoft.Todos",
+    "*Clipchamp*"
 );
 
 # Registry to remove.
