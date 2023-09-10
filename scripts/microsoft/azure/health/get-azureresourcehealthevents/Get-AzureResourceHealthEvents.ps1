@@ -65,10 +65,13 @@ if ($null -eq $AzContexts)
         Write-Information ('Trying to connect to Azure') -InformationAction Continue;
 
         # Connect to Azure.
-        Connect-AzAccount -ErrorAction Stop -WarningAction SilentlyContinue;
+        Connect-AzAccount -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null;
 
         # Write to log.
         Write-Information ('Successfully connected to Azure') -InformationAction Continue;
+
+        # Refresh context.
+        $AzContexts = Get-AzContext -ListAvailable;
     }
     # Something went wrong while connecting.
     catch
@@ -129,7 +132,7 @@ foreach ($AzContext in $AzContexts)
                 Write-Information ('[{0}][{1}][{2}]: We are being throttled by calling the API' -f $AzSubscriptionName, $AzResource.ResourceGroupName, $AzResource.Name) -InformationAction Continue;
 
                 # Split error message with single quote.
-                #$ErrorMessageParts = $_.ErrorDetails.Message -split "'";
+                $ErrorMessageParts = $_.ErrorDetails.Message -split "'";
 
                 # Get seconds to wait.
                 #$SecondsToWait = $ErrorMessageParts[$ErrorMessageParts.Count - 2];
