@@ -35,7 +35,7 @@
 ############### Input - Start ###############
 
 # File path for the CSV export.
-$CsvFilePath = ("{0}\{1}_healthevents.csv" -f [Environment]::GetFolderPath("Desktop"), (Get-Date).ToString("yyyyMMdd"));
+$CsvFilePath = ('{0}\{1}_healthevents.csv' -f [Environment]::GetFolderPath('Desktop'), (Get-Date).ToString('yyyyMMdd'));
 
 ############### Input - End ###############
 #endregion
@@ -56,19 +56,19 @@ Write-Information ("Script started '{0}'" -f (Get-Date)) -InformationAction Cont
 $AzContexts = Get-AzContext -ListAvailable;
 
 # If we are not connected to Azure.
-if($null -eq $AzContexts)
+if ($null -eq $AzContexts)
 {
     # Connect to Azure.
     try
     {
         # Write to log.
-        Write-Information ("Trying to connect to Azure") -InformationAction Continue;
+        Write-Information ('Trying to connect to Azure') -InformationAction Continue;
 
         # Connect to Azure.
         Connect-AzAccount -ErrorAction Stop -WarningAction SilentlyContinue;
 
         # Write to log.
-        Write-Information ("Successfully connected to Azure") -InformationAction Continue;
+        Write-Information ('Successfully connected to Azure') -InformationAction Continue;
     }
     # Something went wrong while connecting.
     catch
@@ -95,7 +95,7 @@ foreach ($AzContext in $AzContexts)
     Set-AzContext -Subscription $AzSubscriptionId | Out-Null;
 
     # Write to log.
-    Write-Information ("[{0}]: Getting all Azure resources" -f $AzSubscriptionName) -InformationAction Continue;
+    Write-Information ('[{0}]: Getting all Azure resources' -f $AzSubscriptionName) -InformationAction Continue;
     
     # Get all resources in subscription.
     $AzResources = Get-AzResource;
@@ -129,7 +129,7 @@ foreach ($AzContext in $AzContexts)
                 Write-Information ('[{0}][{1}][{2}]: We are being throttled by calling the API' -f $AzSubscriptionName, $AzResource.ResourceGroupName, $AzResource.Name) -InformationAction Continue;
 
                 # Split error message with single quote.
-                $ErrorMessageParts = $_.ErrorDetails.Message -split "'";
+                #$ErrorMessageParts = $_.ErrorDetails.Message -split "'";
 
                 # Get seconds to wait.
                 #$SecondsToWait = $ErrorMessageParts[$ErrorMessageParts.Count - 2];
@@ -202,19 +202,19 @@ foreach ($AzContext in $AzContexts)
 ############### Finalize - Start ###############
 
 # If there is some events.
-if($EventResults.Count -gt 0)
+if ($EventResults.Count -gt 0)
 {
     # Write to log.
     Write-Information ("Exporting results to '{0}'" -f $CsvFilePath) -InformationAction Continue;
 
     # Export to CSV.
-    $EventResults | Export-Csv -Path $CsvFilePath -Encoding UTF8 -Delimiter ";" -NoTypeInformation -Force;
+    $EventResults | Export-Csv -Path $CsvFilePath -Encoding UTF8 -Delimiter ';' -NoTypeInformation -Force;
 }
 # Else no events found.
 else
 {
     # Write to log.
-    Write-Information ("No events found for any resources") -InformationAction Continue;
+    Write-Information ('No events found for any resources') -InformationAction Continue;
 }
 
 # Write to log.
