@@ -10,6 +10,7 @@
 .SYNOPSIS
   Set throughput to the minimum value possible on the Cosmos DB database/container.
   Currently the script only support SQL API accounts.
+  It will search in all available Azure subscriptions.
 
 .DESCRIPTION
   Uses Cosmos DB REST api and PowerShell cmdlet to gather container size, throughput and documents count.
