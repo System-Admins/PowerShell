@@ -282,8 +282,53 @@ function Get-CosmosDbThroughputInfo
         [Parameter(Mandatory = $true)]$AccountName
     )
 
-    # Get Cosmos DB account.
-    $CosmosDbAccount = Get-AzResource -ResourceType 'Microsoft.DocumentDB/databaseAccounts' | Where-Object { $_.Name -eq $AccountName };
+    # Get all available Azure subscriptions.
+    $AzSubscriptions = (Get-AzContext -ListAvailable).Subscription;
+
+    # Foreach subscription.
+    foreach ($AzSubscription in $AzSubscriptions)
+    {
+        # Write to log.
+        Write-Log ("Changing context to subscription '{0}'" -f $AzSubscription.Name);
+        
+        # Try to change subscription.
+        try
+        {
+            # Change context to subscription.
+            Set-AzContext -SubscriptionName $AzSubscription.Name -WarningAction SilentlyContinue -ErrorAction Stop | Out-Null;
+        }
+        # Something went wrong while changing subscription.
+        catch
+        {
+            # Write to log.
+            Write-Log ("Something went wrong while changing context to subscription '{0}', skipping" -f $AzSubscription.Name);
+
+            # Take next subscription.
+            continue;
+        }
+
+        # Write to log.
+        Write-Log ("Searching after Cosmos DB '{0}' in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
+
+        # Get Cosmos DB account.
+        $CosmosDbAccount = Get-AzResource -ResourceType 'Microsoft.DocumentDB/databaseAccounts' | Where-Object { $_.Name -eq $AccountName };
+
+        # If the Cosmos DB account exists.
+        if ($null -ne $CosmosDbAccount)
+        {
+            # Write to log.
+            Write-Log ("Found Cosmos DB '{0}' in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
+
+            # Break foreach loop.
+            break;
+        }
+        # Else Cosmos DB dont exist in current subscription.
+        else
+        {
+            # Write to log.
+            Write-Log ("Cosmos DB '{0}' is not found in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
+        }
+    }
 
     # If the Cosmos DB account exists.
     if ($null -eq $CosmosDbAccount)
@@ -305,7 +350,7 @@ function Get-CosmosDbThroughputInfo
     $CosmosDbDatabases = Get-AzCosmosDBSqlDatabase -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name;
 
     # If there is no databases.
-    if($null -eq $CosmosDbDatabases)
+    if ($null -eq $CosmosDbDatabases)
     {
         # Write to log.
         Write-Log ("[{0}][{1}] No databases found in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
