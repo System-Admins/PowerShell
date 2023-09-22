@@ -21,7 +21,7 @@
 #>
 
 #region begin boostrap
-############### Bootstrap - Start ###############
+############### Parameters - Start ###############
 
 [cmdletbinding()]
 
@@ -29,13 +29,19 @@ Param
 (
 )
 
+############### Parameters - End ###############
+#endregion
+
+#region begin bootstrap
+############### Bootstrap - Start ###############
+
 ############### Bootstrap - End ###############
 #endregion
 
-#region begin input
-############### Input - Start ###############
+#region begin variables
+############### Variables - Start ###############
 
-############### Input - End ###############
+############### Variables - End ###############
 #endregion
 
 #region begin functions
