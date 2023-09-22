@@ -24,14 +24,18 @@
   Specifies which subscription to search in for resources with scale events.
 
 .EXAMPLE
-  # This example searches for resources that have been scaled up/down in the last 24 hours in the resource group dg-dev-we-rg in the subscription PD-DEV.
-  # The resource types that are searched for are Microsoft.Sql/servers/databases and Microsoft.Web/serverfarms.
-  .\Get-AzureScaledResources.ps1 -Hours 24 -ResourceTypes "Microsoft.Sql/servers/databases", "Microsoft.Web/serverfarms" -ResourceGroupName "dg-dev-we-rg" -SubscriptionName "PD-DEV";
+  # This example searches for resources that have been scaled up/down in the last 24 hours in all subscriptions available in Azure.
+  .\Get-AzureScaledResources.ps1;
 
 .EXAMPLE
-  # This example searches for resources that have been scaled up/down in the last 24 hours in the resource group dg-dev-we-rg in all subscriptions.
+  # This example searches for resources that have been scaled up/down in the last 24 hours in a resource group in a specific subscription.
   # The resource types that are searched for are Microsoft.Sql/servers/databases and Microsoft.Web/serverfarms.
-  .\Get-AzureScaledResources.ps1 -Hours 24 -ResourceTypes "Microsoft.Sql/servers/databases", "Microsoft.Web/serverfarms" -ResourceGroupName "dg-dev-we-rg";
+  .\Get-AzureScaledResources.ps1 -Hours 24 -ResourceTypes "Microsoft.Sql/servers/databases", "Microsoft.Web/serverfarms" -ResourceGroupName "myResourceGroup" -SubscriptionName "mySubcription";
+
+.EXAMPLE
+  # This example searches for resources that have been scaled up/down in the last 24 hours in a resource group.
+  # The resource types that are searched for are Microsoft.Sql/servers/databases and Microsoft.Web/serverfarms.
+  .\Get-AzureScaledResources.ps1 -Hours 24 -ResourceTypes "Microsoft.Sql/servers/databases", "Microsoft.Web/serverfarms" -ResourceGroupName "myResourceGroup";
 
 .NOTES
   Version:        1.0
@@ -77,6 +81,9 @@ $allowedOperationNames = @(
 
 # Get start time date.
 $StartTime = (Get-Date).AddHours(-$Hours);
+
+# Export CSV file.
+$CsvFilePath = ("{0}\AzureScaledResources.csv" -f [Environment]::GetFolderPath("Desktop"));
 
 ############### Variables - End ###############
 #endregion
@@ -394,6 +401,16 @@ foreach ($subscription in $resources | Group-Object -Property SubscriptionId)
 
 #region begin finalize
 ############### Finalize - Start ###############
+
+# If there is any info in the scaled resources object array.
+if ($scaledResources.Count -gt 0)
+{
+    # Write to log.
+    Write-Log -Text ("Exporting result to a CSV file '{0}'" -f $CsvFilePath);
+
+    # Export scaled resources to a CSV file on the desktop.
+    $scaledResources | Export-Csv -Path $CsvFilePath -NoTypeInformation -Encoding UTF8;
+}
 
 # Write to log.
 Write-Log -Text ("Disconnecting from Azure");
