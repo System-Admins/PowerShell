@@ -53,6 +53,7 @@
 ############### Bootstrap - Start ###############
 
 # Parameters.
+[cmdletbinding()]
 param
 (
     [Parameter(Mandatory = $true)][string]$SqlResourceName,
