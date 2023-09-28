@@ -8,24 +8,44 @@
 
 <#
 .SYNOPSIS
-  Set throughput to the minimum value possible on the Cosmos DB database/container.
+  Set throughput value on the Cosmos DB database/container based on JSON input.
   Currently the script only support SQL API accounts.
-  It will search in all available Azure subscriptions.
 
 .DESCRIPTION
-  Uses Cosmos DB REST api and PowerShell cmdlet to gather container size, throughput and documents count.
-  After gathering information, it will decrease throughput values to lowest possible.
-  This script was created for non-production environments to minimize costs for the Cosmos DB
-  and currently there is a bug when you restore a Cosmos DB from continous backup it will assign a random throughput value.
+  Go through the JSON input and check if the throughput settings is correct on the Cosmos DB account.
+  If not then it will try to set the correct throughput settings accordingly.
+  To set throughput on a database only, set the "ContainerName" to an empty string in the JSON input.
+  If you need to set throughput on a container (that is not member of an shared pool), specify the "ContainerName" in the JSON input.
 
 .NOTES
   Version:        1.0
   Author:         Alex Ø. T. Hansen (ath@systemadmins.com)
-  Creation Date:  22-02-2023
+  Creation Date:  28-09-2023
   Purpose/Change: Initial script development
-  
+
+.PARAMETER AccountName
+  The name of the Cosmos DB account.
+
+.PARAMETER ThroughputInput
+  The JSON input to set throughput on the Cosmos DB account.
+  Example of JSON input:
+  [
+    {
+        "DatabaseName":  "myDatabase1",
+        "ContainerName":  "",
+        "AutoscaleEnabled":  true,
+        "Throughput":  15000
+    },
+    {
+        "DatabaseName":  "myDatabase1",
+        "ContainerName":  "myContainer1",
+        "AutoscaleEnabled":  false,
+        "Throughput":  8000
+    }
+  ]
+
 .EXAMPLE
-  .\Set-CosmosDbThroughput.ps1 -AccountName "<Cosmos DB acocunt name>"
+  .\Set-CosmosDbThroughput.ps1 -AccountName "<Cosmos DB acocunt name>" -ThroughputInput "<JSON input>";
 #>
 
 #region begin boostrap
@@ -34,7 +54,8 @@
 # Parameters.
 Param
 (
-    [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9-]{3,44}$')][string]$AccountName
+    [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9-]{3,44}$')][string]$AccountName,
+    [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$ThroughputInput
 )
 
 ############### Bootstrap - End ###############
@@ -72,393 +93,65 @@ Function Write-Log
     }
 }
 
-# Generate authorization key.
-Function New-MasterKeyAuthorizationSignature
+# Test JSON.
+function Test-Json
 {
-    [CmdletBinding()]
-    Param
+    param
     (
-        [Parameter(Mandatory = $false)][ValidateSet("Get")][string]$Verb = "Get",
-        [Parameter(Mandatory = $false)][string]$ResourceLink,
-        [Parameter(Mandatory = $true)][ValidateSet("colls", "offers")][string]$ResourceType,
-        [Parameter(Mandatory = $true)][string]$MasterKey,
-        [Parameter(Mandatory = $true)][ValidateSet("master")][string]$KeyType,
-        [Parameter(Mandatory = $false)][string]$TokenVersion = "1.0",
-        [Parameter(Mandatory = $true)][datetime]$Today
+        [Parameter(Mandatory = $true)][string]$JsonString
     )
 
-    # Add assemblies.
-    Add-Type -AssemblyName System.Web;
-
-    # DateTime in string format.
-    $DateTime = $Today.ToString("r");
-
-    # Create SHA.
-    $HmacSha256 = New-Object System.Security.Cryptography.HMACSHA256;
-
-    # Convert BASE64 to byte array.
-    $HmacSha256.Key = [System.Convert]::FromBase64String($MasterKey);
-    
-    # Create payload.
-    $PayLoad = "$($Verb.ToLowerInvariant())`n$($ResourceType.ToLowerInvariant())`n$ResourceLink`n$($DateTime.ToLowerInvariant())`n`n";
-
-    # Create hash from the payload.
-    $HashPayLoad = $HmacSha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($PayLoad));
-
-    # Convert hash to BASE64.
-    $Signature = [System.Convert]::ToBase64String($HashPayLoad);
-
-    # Encode URL.
-    $UrlEncode = [System.Web.HttpUtility]::UrlEncode("type=$KeyType&ver=$TokenVersion&sig=$Signature");
-
-    # Return URL encoding.
-    Return $UrlEncode;
-}
-
-# Get Cosmos DB container metadata.
-Function Get-CosmosDbContainerStatistics
-{
-    [CmdletBinding()]
-    Param
-    (
-        [Parameter(Mandatory = $true)][string]$EndpointUri,
-        [Parameter(Mandatory = $true)][string]$MasterKey,
-        [Parameter(Mandatory = $true)][string]$DatabaseName,
-        [Parameter(Mandatory = $true)][string]$CollectionName
-    )
-
-    # Get datetime in UTC format.
-    $Today = [DateTime]::UtcNow;
-
-    # Construct resource link.
-    $ResourceLink = ("dbs/{0}/colls/{1}" -f $DatabaseName, $CollectionName);
-
-    # Generate auth key.
-    $AuthHeader = New-MasterKeyAuthorizationSignature -Verb GET `
-        -ResourceLink $ResourceLink `
-        -ResourceType colls `
-        -MasterKey $MasterKey `
-        -KeyType master `
-        -Today $Today;
-
-    # Create REST header.
-    $Headers = @{
-        'authorization'                               = $AuthHeader;
-        "x-ms-version"                                = "2018-09-17";
-        "x-ms-date"                                   = $Today.ToString("r");
-        "x-ms-documentdb-populatepartitionstatistics" = "true";
-        "x-ms-documentdb-populatequotainfo"           = "true";
-    };
-
-    # Construct URI for the REST method.
-    $Uri = ("{0}{1}" -f $EndpointUri, $ResourceLink);
-
-    # Try to invoke REST method
+    # Valid JSON input.
+    [bool]$validJson = $true;
+ 
+    # Try to test string.
     try
     {
-        # Invoke REST method.
-        $Result = Invoke-WebRequest -Method Get -ContentType "application/json" -Uri $Uri -Headers $Headers;
-
-        # Split header response.
-        $Resources = ($Result.headers["x-ms-resource-usage"]).Split(';', [System.StringSplitOptions]::RemoveEmptyEntries)
-
-        # Hash table to store keys/values.
-        $UsageItems = @{};
-
-        # Foreach resource.
-        Foreach ($Resource in $Resources)
-        {
-            # Split resource info to key and value.
-            [string] $Key, $Value = $Resource.Split('=');
-            
-            # Add to hash table.
-            $UsageItems[$Key] = $Value;
-        }
-
-        # If there is any items.
-        If ($UsageItems)
-        {
-            # Return items.
-            Return $UsageItems;
-        }
+        # Try to convert input string to JSON object.
+        $jsonObjects = $JsonString | ConvertFrom-Json;
     }
-    # Something went wrong while getting the container size.
+    # Something went wrong.
     catch
     {
-        # Write to log.
-        Write-Log ("{0}" -f $_);
-    }
-}
-
-# Get Cosmos DB offers (throughput info).
-Function Get-CosmosDbOffers
-{
-    [CmdletBinding()]
-    Param
-    (
-        [Parameter(Mandatory = $true)][string]$EndpointUri,
-        [Parameter(Mandatory = $true)][string]$MasterKey
-    )
-
-    # Get datetime in UTC format.
-    $Today = [DateTime]::UtcNow;
-
-    # Generate auth key.
-    $AuthHeader = New-MasterKeyAuthorizationSignature -Verb GET `
-        -ResourceType offers `
-        -MasterKey $MasterKey `
-        -KeyType master `
-        -Today $Today;
-
-    # Create REST header.
-    $Headers = @{
-        'authorization' = $AuthHeader;
-        "x-ms-version"  = "2018-09-17";
-        "x-ms-date"     = $Today.ToString("r");
-    };
-
-    # Construct URI for the REST method.
-    $Uri = ("{0}offers" -f $EndpointUri);
-
-    # Try to invoke REST method
-    try
-    {
-        # Invoke REST method.
-        $Result = Invoke-WebRequest -Method Get -ContentType "application/json" -Uri $Uri -Headers $Headers;
-
-        # Return offers.
-        return ($Result.Content | ConvertFrom-Json).Offers;
-    }
-    # Something went wrong while getting the offers.
-    catch
-    {
-        # Write to log.
-        Write-Log ("{0}" -f $_);
-    }
-}
-
-# Convert any-to-any data sizes.
-function Convert-DataSize
-{
-    [cmdletbinding()]
-    Param
-    (
-        [Parameter(Mandatory = $true)][ValidateSet("Bytes", "KB", "MB", "GB", "TB")][string]$From,
-        [Parameter(Mandatory = $true)][ValidateSet("Bytes", "KB", "MB", "GB", "TB")][string]$To,
-        [Parameter(Mandatory = $true)][double]$Value,
-        [Parameter(Mandatory = $false)][int]$Precision = 4
-    )
-
-    # What to convert it from.
-    switch ($From)
-    {
-        "Bytes" { $value = $Value }
-        "KB" { $value = $Value * 1024 }
-        "MB" { $value = $Value * 1024 * 1024 }
-        "GB" { $value = $Value * 1024 * 1024 * 1024 }
-        "TB" { $value = $Value * 1024 * 1024 * 1024 * 1024 }
+        # Not a valid JSON object.
+        $validJson = $false;
     }
 
-    # What to convert it to.
-    switch ($To)
+    # Valid JSON object keys.
+    $validJsonKeys = @(
+        "DatabaseName",
+        "ContainerName",
+        "AutoscaleEnabled",
+        "Throughput"
+    );
+
+    # Check if JSON objects is valid.
+    foreach ($jsonObject in $jsonObjects)
     {
-        "Bytes" { return $value }
-        "KB" { $Value = $Value / 1KB }
-        "MB" { $Value = $Value / 1MB }
-        "GB" { $Value = $Value / 1GB }
-        "TB" { $Value = $Value / 1TB }
-
-    }
-
-    # Return value.
-    return [Math]::Round($value, $Precision, [MidPointRounding]::AwayFromZero)
-}
-
-# Get Cosmos DB throughput info.
-function Get-CosmosDbThroughputInfo
-{
-    [cmdletbinding()]
-    Param
-    (
-        [Parameter(Mandatory = $true)]$AccountName
-    )
-
-    # Get all available Azure subscriptions.
-    $AzSubscriptions = (Get-AzContext -ListAvailable).Subscription;
-
-    # Foreach subscription.
-    foreach ($AzSubscription in $AzSubscriptions)
-    {
-        # Write to log.
-        Write-Log ("Changing context to subscription '{0}'" -f $AzSubscription.Name);
-        
-        # Try to change subscription.
-        try
+        # Foreach valid JSON key.
+        foreach ($validJsonKey in $validJsonKeys)
         {
-            # Change context to subscription.
-            Set-AzContext -SubscriptionName $AzSubscription.Name -WarningAction SilentlyContinue -ErrorAction Stop | Out-Null;
-        }
-        # Something went wrong while changing subscription.
-        catch
-        {
-            # Write to log.
-            Write-Log ("Something went wrong while changing context to subscription '{0}', skipping" -f $AzSubscription.Name);
-
-            # Take next subscription.
-            continue;
-        }
-
-        # Write to log.
-        Write-Log ("Searching after Cosmos DB '{0}' in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
-
-        # Get Cosmos DB account.
-        $CosmosDbAccount = Get-AzResource -ResourceType 'Microsoft.DocumentDB/databaseAccounts' | Where-Object { $_.Name -eq $AccountName };
-
-        # If the Cosmos DB account exists.
-        if ($null -ne $CosmosDbAccount)
-        {
-            # Write to log.
-            Write-Log ("Found Cosmos DB '{0}' in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
-
-            # Break foreach loop.
-            break;
-        }
-        # Else Cosmos DB dont exist in current subscription.
-        else
-        {
-            # Write to log.
-            Write-Log ("Cosmos DB '{0}' is not found in subscription '{1}'" -f $AccountName, $AzSubscription.Name);
-        }
+            # If JSON object dont have the key.
+            if ($null -eq $jsonObject.$validJsonKey)
+            {
+                # Not a valid JSON object.
+                $validJson = $false;
+            }
+        } 
     }
 
-    # If the Cosmos DB account exists.
-    if ($null -eq $CosmosDbAccount)
+    # If valid.
+    if ($true -eq $validJson)
     {
-        # Throw exception.
-        throw ("The Cosmos DB account '{0}' dont exist" -f $AccountName);
+        # Return valid.
+        return $true;
     }
-
-    # Get endpoint URI.
-    $CosmosDbAccountDocumentEndpoint = (Get-AzCosmosDBAccount -ResourceGroupName $CosmosDbAccount.ResourceGroupName -Name $CosmosDbAccount.Name).DocumentEndpoint;
-
-    # Get master key.
-    $CosmosDbAccountMasterKey = (Get-AzCosmosDBAccountKey -ResourceGroupName $CosmosDbAccount.ResourceGroupName -Name $CosmosDbAccount.Name).PrimaryReadonlyMasterKey;
-
-    # Write to log.
-    Write-Log ("[{0}][{1}] Getting all databases in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
-
-    # Get all databases.
-    $CosmosDbDatabases = Get-AzCosmosDBSqlDatabase -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name;
-
-    # If there is no databases.
-    if ($null -eq $CosmosDbDatabases)
+    # Else invalid.
+    else
     {
-        # Write to log.
-        Write-Log ("[{0}][{1}] No databases found in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
-
-        # Return null.
-        return $null;
+        # Return not valid.
+        return $false;
     }
-
-    # Write to log.
-    Write-Log ("[{0}][{1}] Getting offers in Cosmos DB account" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name);
-
-    # Get all offers.
-    $CosmosDbOffers = Get-CosmosDbOffers -EndpointUri $CosmosDbAccountDocumentEndpoint -MasterKey $CosmosDbAccountMasterKey;
-
-    # Object arrays to store results.
-    $ContainerResults = @();
-
-    # Foreach database.
-    Foreach ($CosmosDbDatabase in $CosmosDbDatabases)
-    {
-        # Write to log.
-        Write-Log ("[{0}][{1}][{2}] Getting (if any) database throughput values" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name, $CosmosDbDatabase.Name);
-
-        # Get throughput settings on the database.
-        $DatabaseThroughput = Get-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $CosmosDbDatabase.Name -ErrorAction SilentlyContinue;
-    
-        # Write to log.
-        Write-Log ("[{0}][{1}][{2}] Getting all containers in the database" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name, $CosmosDbDatabase.Name);
-
-        # Get all containers in the database.
-        $CosmosDbContainers = Get-AzCosmosDBSqlContainer -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $CosmosDbDatabase.Name;
-
-        # Foreach container.
-        Foreach ($CosmosDbContainer in $CosmosDbContainers)
-        {        
-            # Write to log.
-            Write-Log ("[{0}][{1}][{2}][{3}] Getting container statistics and throughput settings" -f $CosmosDbAccount.ResourceGroupName, $CosmosDbAccount.Name, $CosmosDbDatabase.Name, $CosmosDbContainer.Name);
-
-            # Get container size.
-            $ContainerStatistics = Get-CosmosDbContainerStatistics -EndpointUri $CosmosDbAccountDocumentEndpoint -MasterKey $CosmosDbAccountMasterKey -DatabaseName $CosmosDbDatabase.Name -CollectionName $CosmosDbContainer.Name;
-
-            # Get container throughput.
-            $ContainerThroughput = Get-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $CosmosDbDatabase.Name -Name $CosmosDbContainer.Name -ErrorAction SilentlyContinue;
-
-            # If there is set throughput on the container.
-            if ($null -ne $ContainerThroughput)
-            {
-                # Manual throughput.
-                [bool]$SharedThroughput = $false;
-
-                # Set throughput object.
-                $ThroughputSettings = $ContainerThroughput;
-            }
-            # Else throughput is shared in the database.
-            else
-            {
-                # Shared throughput.
-                [bool]$SharedThroughput = $true;
-
-                # Set throughput object.
-                $ThroughputSettings = $DatabaseThroughput;
-            }
-
-            # If autoscale is enabled.
-            if ($ThroughputSettings.AutoscaleSettings.MaxThroughput -ne 0)
-            {
-                # Autoscale is enabled.
-                [bool]$AutoscaleEnabled = $true;
-
-                # Max throughput.
-                $MaxThroughput = $ThroughputSettings.AutoscaleSettings.MaxThroughput;
-            }
-            # Else autoscale is not enabled
-            else
-            {
-                # Autoscale is disabled.
-                [bool]$AutoscaleEnabled = $false;
-
-                # Max throughput.
-                $MaxThroughput = $ThroughputSettings.Throughput;
-            }
-
-            # Get offer from throughput.
-            $Offer = $CosmosDbOffers | Where-Object { $_.id -eq $ThroughputSettings.Name };
-
-            # Add to object array.
-            $ContainerResults += [PSCustomObject]@{
-                "ResourceGroupName"            = $CosmosDbAccount.ResourceGroupName;
-                "AccountName"                  = $CosmosDbAccount.Name;
-                "DatabaseName"                 = $CosmosDbDatabase.Name;
-                "ContainerName"                = $CosmosDbContainer.Name;
-                "ContainerSizeInKB"            = $ContainerStatistics.collectionSize;
-                "DocumentsCount"               = $ContainerStatistics.documentsCount;
-                "DocumentsSizeInKB"            = $ContainerStatistics.documentsSize;
-                "SharedThroughput"             = $SharedThroughput;
-                "MinimumThroughput"            = $ThroughputSettings.Throughput;
-                "MinimumThroughputPossible"    = $ThroughputSettings.MinimumThroughput;
-                "AutoscaleEnabled"             = $AutoscaleEnabled;
-                "MaxThroughput"                = $MaxThroughput;
-                "MaxThroughputEverProvisioned" = $Offer.content.offerMinimumThroughputParameters.maxThroughputEverProvisioned;
-                "MaxConsumedStorageEverInKB"   = $Offer.content.offerMinimumThroughputParameters.maxConsumedStorageEverInKB;
-            };
-        }
-    }
-
-    # Return result.
-    Return $ContainerResults;
 }
 
 ############### Functions - End ###############
@@ -467,90 +160,479 @@ function Get-CosmosDbThroughputInfo
 #region begin main
 ############### Main - Start ###############
 
-# Get throughput info.
-$CosmosDbThroughputs = Get-CosmosDbThroughputInfo -AccountName $AccountName;
+# Write to log.
+Write-Log ("Script started at {0}" -f (Get-Date));
 
-# Foreach throughput info.
-foreach ($CosmosDbThroughput in $CosmosDbThroughputs)
+# Get Cosmos DB account.
+$CosmosDbAccount = Get-AzResource -ResourceType 'Microsoft.DocumentDB/databaseAccounts' -Name $AccountName;
+
+# If the Cosmos DB account dont exist.
+if ($null -eq $CosmosDbAccount)
 {
-    # If the throughput is not low as possible.
-    if ($CosmosDbThroughput.MaxThroughput -ne $CosmosDbThroughput.MinimumThroughputPossible)
+    # Throw exception.
+    throw ("The Cosmos DB account '{0}' dont exist" -f $AccountName);
+}
+
+# If JSON input is valid. 
+if ($false -eq (Test-Json -JsonString $ThroughputInput))
+{
+    # Throw execption.
+    throw ("The following JSON input is not valid:`r`n'{0}'" -f $JsonThroughputSettings);
+}
+
+# Convert string to JSON.
+$declaredThroughputSettings = ConvertFrom-Json -InputObject $ThroughputInput;
+
+# Get all throughput settings for databases only.
+$declaredDatabaseThroughputSettings = $declaredThroughputSettings | Where-Object { [string]::IsNullOrEmpty($_.ContainerName) };
+
+# Get all throughput settings for containers only.
+$declaredContainerThroughputSettings = $declaredThroughputSettings | Where-Object { -not [string]::IsNullOrEmpty($_.ContainerName) };
+
+# Container counter.
+$databaseCounter = 1;
+
+# If there is some databases to update.
+if ($declaredDatabaseThroughputSettings.Count -gt 0)
+{
+    # Write to log.
+    Write-Log ("");
+
+    # Write to log.
+    Write-Log ("[{0}] Databases ({1}) to check throughput settings:" -f $CosmosDbAccount.Name, $declaredDatabasesThroughputSettings.Count);
+    
+    # Foreach database.
+    foreach ($declaredDatabaseThroughputSetting in $declaredDatabaseThroughputSettings)
     {
-        # If Cosmos DB container is using shared throughput from the database.
-        if ($true -eq $CosmosDbThroughput.SharedThroughput)
+        # Write to log.
+        Write-Log ("{0}. Account: {1} | Database: {2} | Autoscale: {3} | Throughput: {4}" -f $databaseCounter, $CosmosDbAccount.Name, $declaredContainerThroughputSetting.DatabaseName, $declaredContainerThroughputSetting.AutoscaleEnabled, $declaredContainerThroughputSetting.Throughput);
+
+        # Add to counter.
+        $databaseCounter++;
+    }
+
+    # Write to log.
+    Write-Log ("");
+}
+
+# Foreach database to adjust throughput (R/U).
+foreach ($declaredDatabaseThroughputSetting in $declaredDatabaseThroughputSettings[0])
+{
+    # Variables.
+    [bool]$autoscaleEnabledOnDatabase = $false;
+    [int]$throughputValue = 0;
+
+    # Get Cosmos DB database
+    $cosmosDbDatabase = Get-AzCosmosDBSqlDatabase -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $declaredDatabaseThroughputSetting.DatabaseName -ErrorAction SilentlyContinue;
+
+    # If database is not found.
+    if ($null -eq $cosmosDbDatabase)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] Database not found, skipping" -f $CosmosDbAccount.Name, $declaredDatabaseThroughputSetting.DatabaseName);
+    
+        # Continue to next database.
+        continue;
+    }
+
+    # Try to convert autoscale to boolean.
+    try
+    {
+        # Convert string to boolean.
+        [bool]$declaredDatabaseThroughputSetting.AutoscaleEnabled = [System.Convert]::ToBoolean($declaredDatabaseThroughputSetting.AutoscaleEnabled);
+    }
+    # Something went wrong while converting.
+    catch
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] Autoscale value '{2}' of database not valid from JSON, skipping" -f $CosmosDbAccount.Name, $declaredDatabaseThroughputSetting.DatabaseName, $declaredDatabaseThroughputSetting.AutoscaleEnabled);
+
+        # Continue to next database.
+        contiune;
+    }
+    
+    # If throughput value is empty.
+    if ([string]::IsNullOrEmpty($declaredDatabaseThroughputSetting.Throughput))
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] Throughput value is empty, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name);
+
+        # Continue to next database.
+        continue;
+    }
+
+    # Get throughput settings on the database.
+    $cosmosDbDatabaseThroughput = Get-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $declaredDatabaseThroughputSetting.DatabaseName -ErrorAction SilentlyContinue;
+
+    # If there is no throughput settings on the database.
+    if ($null -eq $cosmosDbDatabaseThroughput)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] Shared throughput on database is not enabled, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name);
+
+        # Continue to next database.
+        continue;
+    }
+
+    # If autoscale is enabled.
+    if ($cosmosDbDatabaseThroughput.AutoscaleSettings.MaxThroughput -ne 0)
+    {
+        # Autoscale is enabled.
+        $autoscaleEnabledOnDatabase = $true;
+
+        # Set throughput value.
+        $throughputValue = $cosmosDbDatabaseThroughput.AutoscaleSettings.MaxThroughput;
+    }
+    # Else autoscale is not enabled.
+    else
+    {
+        # Set throughput value.
+        $throughputValue = $cosmosDbDatabaseThroughput.Throughput;
+    }
+
+    # If autoscale should be enabled or disabled.
+    if ($declaredDatabaseThroughputSetting.AutoscaleEnabled -ne $autoscaleEnabledOnDatabase)
+    {
+        # If manual.
+        if ($false -eq $declaredDatabaseThroughputSetting.AutoscaleEnabled)
         {
-            # Refresh throughput values.
-            $CosmosDbDatabaseThroughput = Get-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbThroughput.ResourceGroupName -AccountName $CosmosDbThroughput.AccountName -Name $CosmosDbThroughput.DatabaseName;
-            
-            # If the shared throughput is not low as possible.
-            if ($CosmosDbDatabaseThroughput.AutoscaleSettings.MaxThroughput -ne $CosmosDbThroughput.MinimumThroughputPossible)
-            {
-                # If autoscale is enabled.
-                if ($true -eq $CosmosDbThroughput.AutoscaleEnabled)
-                {
-                    # Write to log.
-                    Write-Log ("[{0}][{1}][{2}] Setting autoscale database throughput from {3} to {4}" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.MaxThroughput, $CosmosDbThroughput.MinimumThroughputPossible);
-
-                    # Update autoscale max throughput on the database.
-                    Update-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbThroughput.ResourceGroupName `
-                        -AccountName $CosmosDbThroughput.AccountName `
-                        -Name $CosmosDbThroughput.DatabaseName `
-                        -AutoscaleMaxThroughput $CosmosDbThroughput.MinimumThroughputPossible `
-                        -ErrorAction Stop | Out-Null;
-                }
-                # Else autoscale is not enabled.
-                else
-                {
-                    # Write to log.
-                    Write-Log ("[{0}][{1}][{2}] Setting database throughput from {3} to {4}" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.MaxThroughput, $CosmosDbThroughput.MinimumThroughputPossible);
-
-                    # Update autoscale max throughput on the database.
-                    Update-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbThroughput.ResourceGroupName `
-                        -AccountName $CosmosDbThroughput.AccountName `
-                        -Name $CosmosDbThroughput.DatabaseName `
-                        -Throughput $CosmosDbThroughput.MinimumThroughputPossible `
-                        -ErrorAction Stop | Out-Null;
-                }
-            }
+            # Set throughput type.
+            [string]$throughputType = "Manual";
         }
-        # Else throughput is set on container.
+        # Else use autoscale.
         else
         {
-            # If autoscale is enabled.
-            if ($true -eq $CosmosDbThroughput.AutoscaleEnabled)
-            {
-                # Write to log.
-                Write-Log ("[{0}][{1}][{2}][{3}] Setting autoscale container throughput from {4} to {5}" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.ContainerName, $CosmosDbThroughput.MaxThroughput, $CosmosDbThroughput.MinimumThroughputPossible);
+            # Set throughput type.
+            [string]$throughputType = "Autoscale";
+        }
 
-                # Update autoscale max throughput on the container.
-                Update-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbThroughput.ResourceGroupName `
-                    -AccountName $CosmosDbThroughput.AccountName `
-                    -DatabaseName $CosmosDbThroughput.DatabaseName `
-                    -Name $CosmosDbThroughput.ContainerName `
-                    -AutoscaleMaxThroughput $CosmosDbThroughput.MinimumThroughputPossible `
-                    -ErrorAction Stop | Out-Null;
-            }
-            # Else autoscale is not enabled.
-            else
-            {
-                # Write to log.
-                Write-Log ("[{0}][{1}][{2}][{3}] Setting container throughput from {4} to {5}" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.ContainerName, $CosmosDbThroughput.MaxThroughput, $CosmosDbThroughput.MinimumThroughputPossible);
+        # Write to log.
+        Write-Log ("[{0}][{1}] Autoscale should be set to '{2}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $throughputType);
 
-                # Update autoscale max throughput on the container.
-                Update-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbThroughput.ResourceGroupName `
-                    -AccountName $CosmosDbThroughput.AccountName `
-                    -DatabaseName $CosmosDbThroughput.DatabaseName `
-                    -Name $CosmosDbThroughput.ContainerName `
-                    -Throughput $CosmosDbThroughput.MinimumThroughputPossible `
-                    -ErrorAction Stop | Out-Null;
-            }
+        # Try to change autoscale setting.
+        try
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}] Trying to change autoscale to '{2}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $throughputType);
+        
+            # Invoke autoscale migration.
+            Invoke-AzCosmosDBSqlDatabaseThroughputMigration -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $cosmosDbDatabase.Name -ThroughputType $throughputType | Out-Null;
+
+            # Write to log.
+            Write-Log ("[{0}][{1}] Successfully change autoscale to '{2}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $throughputType);
+        }
+        catch
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}] Something went wrong change autoscale, here is the execption: `r`n{2}" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $_);
+        }
+
+        # Update throughput settings from the database.
+        $cosmosDbDatabaseThroughput = Get-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $declaredDatabaseThroughputSetting.DatabaseName -ErrorAction SilentlyContinue;
+
+        # If autoscale is enabled.
+        if ($cosmosDbDatabaseThroughput.AutoscaleSettings.MaxThroughput -ne 0)
+        {
+            # Autoscale is enabled.
+            $autoscaleEnabledOnDatabase = $true;
+        }
+        # Else autoscale is not enabled.
+        else
+        {
+            # Autoscale is disabled.
+            $autoscaleEnabledOnDatabase = $false;
         }
     }
-    # Else throughput value already correct.
+    # Else autoscale setting already correct.
     else
     {
         # Write to log.
-        Write-Log ("[{0}][{1}][{2}][{3}] Throughput value '{4}' is already correct, skipping" -f $CosmosDbThroughput.ResourceGroupName, $CosmosDbThroughput.AccountName, $CosmosDbThroughput.DatabaseName, $CosmosDbThroughput.ContainerName, $CosmosDbThroughput.MinimumThroughputPossible);
+        Write-Log ("[{0}][{1}] Autoscale already set to '{2}', skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $autoscaleEnabledOnDatabase);
+    }
+
+    # If throughput value is already correct.
+    if ($throughputValue -eq ($declaredDatabaseThroughputSetting.Throughput -as [int]))
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}] Throughput value is already set to '{2}', skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $throughputValue);
+
+        # Continue to next database.
+        continue;
+    }
+    # Else we need to update the throughput value.
+    else
+    {
+        # Get nearest thousands for throughput.
+        $throughputNearestThounds = [math]::Ceiling($declaredDatabaseThroughputSetting.Throughput / 1000) * 1000;
+
+        # If throughput value and nearest thousands is not the same.
+        if ($throughputNearestThounds -ne $declaredDatabaseThroughputSetting.Throughput)
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}] Throughput value must be specified as whole thousands, changing input value from '{2}' to '{3}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $declaredDatabaseThroughputSetting.Throughput, $throughputNearestThounds);
+
+            # Update value.
+            $declaredDatabaseThroughputSetting.Throughput = $throughputNearestThounds;
+        }
+
+        # Try to change throughput.
+        try
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}] Trying to change throughput to '{2}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $declaredDatabaseThroughputSetting.Throughput);
+        
+            # If autoscale is enabled use max throughput.
+            if ($true -eq $autoscaleEnabledOnDatabase)
+            {
+                # Change throughput.
+                Update-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $cosmosDbDatabase.Name -AutoscaleMaxThroughput $declaredDatabaseThroughputSetting.Throughput -ErrorAction Stop | Out-Null;
+            }
+            # Else autoscale is not enabled use static throughput.
+            else
+            {
+                # Change throughput.
+                Update-AzCosmosDBSqlDatabaseThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $cosmosDbDatabase.Name -Throughput $declaredDatabaseThroughputSetting.Throughput -ErrorAction Stop | Out-Null;
+            }
+
+            # Write to log.
+            Write-Log ("[{0}][{1}] Successfully change throughput to '{2}', scale up can take up to 6 hours" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $declaredDatabaseThroughputSetting.Throughput);
+        }
+        # Something went wrong changing the throughput.
+        catch
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}] Something went wrong change throughput, here is the execption: `r`n{2}" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $_);
+        }
+    }
+}
+
+# Container counter.
+$containerCounter = 1;
+
+# If there is some containers to update.
+if ($declaredContainerThroughputSettings.Count -gt 0)
+{
+    # Write to log.
+    Write-Log ("");
+    
+    # Write to log.
+    Write-Log ("[{0}] Containers ({1}) to check throughput settings:" -f $CosmosDbAccount.Name, $declaredContainerThroughputSettings.Count);
+    
+    # Foreach container.
+    foreach ($declaredContainerThroughputSetting in $declaredContainerThroughputSettings)
+    {
+        # Write to log.
+        Write-Log ("{0}. Account: {1} | Database: {2} | Container: {3} | Autoscale: {4} | Throughput: {5}" -f $containerCounter, $CosmosDbAccount.Name, $declaredContainerThroughputSetting.DatabaseName, $declaredContainerThroughputSetting.ContainerName, $declaredContainerThroughputSetting.AutoscaleEnabled, $declaredContainerThroughputSetting.Throughput);
+
+        # Add to counter.
+        $containerCounter++;
+    }
+
+    # Write to log.
+    Write-Log ("");
+}
+
+# Foreach container to adjust throughput (R/U).
+foreach ($declaredContainerThroughputSetting in $declaredContainerThroughputSettings)
+{
+    # Variables.
+    [bool]$autoscaleEnabledOnContainer = $false;
+    [int]$throughputValue = 0;
+
+    # Get Cosmos DB database
+    $cosmosDbDatabase = Get-AzCosmosDBSqlDatabase -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -Name $declaredContainerThroughputSetting.DatabaseName -ErrorAction SilentlyContinue;
+
+    # If database is not found.
+    if ($null -eq $cosmosDbDatabase)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Database not found, skipping" -f $CosmosDbAccount.Name, $declaredContainerThroughputSetting.DatabaseName, $declaredContainerThroughputSetting.ContainerName);
+     
+        # Continue to next container.
+        continue;
+    }
+
+    # Get Cosmos DB container.
+    $cosmosDbContainer = Get-AzCosmosDBSqlContainer -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $declaredContainerThroughputSetting.ContainerName -ErrorAction SilentlyContinue;
+
+    # If container is not found.
+    if ($null -eq $cosmosDbContainer)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Container not found, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $declaredContainerThroughputSetting.ContainerName);
+    
+        # Continue to next container.
+        continue;
+    }
+
+    # Try to convert autoscale to boolean.
+    try
+    {
+        # Convert string to boolean.
+        [bool]$declaredContainerThroughputSetting.AutoscaleEnabled = [System.Convert]::ToBoolean($declaredContainerThroughputSetting.AutoscaleEnabled);
+    }
+    # Something went wrong while converting.
+    catch
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Autoscale value '{3}' of container not valid from JSON, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $declaredContainerThroughputSetting.AutoscaleEnabled);
+    
+        # Continue to next container.
+        contiune;
+    }
+
+    # If throughput value is empty.
+    if ([string]::IsNullOrEmpty($declaredContainerThroughputSetting.Throughput))
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Throughput value is empty, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name);
+    
+        # Continue to next container.
+        continue;
+    }
+
+    # Get throughput settings on the container.
+    $cosmosDbContainerThroughput = Get-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $cosmosDbContainer.Name -ErrorAction SilentlyContinue;
+
+    # If there is no throughput settings on the container (must be shared pool).
+    if ($null -eq $cosmosDbContainerThroughput)
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Container is using database shared throughput, skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name);
+
+        # Continue to next container.
+        continue;
+    }
+    
+    # If autoscale is enabled.
+    if ($cosmosDbContainerThroughput.AutoscaleSettings.MaxThroughput -ne 0)
+    {
+        # Autoscale is enabled.
+        $autoscaleEnabledOnContainer = $true;
+    
+        # Set throughput value.
+        $throughputValue = $cosmosDbContainerThroughput.AutoscaleSettings.MaxThroughput;
+    }
+    # Else autoscale is not enabled.
+    else
+    {
+        # Set throughput value.
+        $throughputValue = $cosmosDbContainerThroughput.Throughput;
+    }
+
+    # If autoscale should be enabled or disabled.
+    if ($declaredContainerThroughputSetting.AutoscaleEnabled -ne $autoscaleEnabledOnContainer)
+    {
+        # If manual.
+        if ($false -eq $declaredContainerThroughputSetting.AutoscaleEnabled)
+        {
+            # Set throughput type.
+            [string]$throughputType = "Manual";
+        }
+        # Else use autoscale.
+        else
+        {
+            # Set throughput type.
+            [string]$throughputType = "Autoscale";
+        }
+
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Autoscale should be set to '{3}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $throughputType);
+
+        # Try to change autoscale setting.
+        try
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Trying to change autoscale to '{3}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $throughputType);
+        
+            # Invoke autoscale migration.
+            Invoke-AzCosmosDBSqlContainerThroughputMigration -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $cosmosDbContainer.Name -ThroughputType $throughputType | Out-Null;
+
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Successfully change autoscale to '{3}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $throughputType);
+        }
+        catch
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Something went wrong change autoscale, here is the execption: `r`n{3}" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $_);
+        }
+
+        # Update throughput settings from the container.
+        $cosmosDbContainerThroughput = Get-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $cosmosDbContainer.Name -ErrorAction SilentlyContinue;
+
+        # If autoscale is enabled.
+        if ($cosmosDbContainerThroughput.AutoscaleSettings.MaxThroughput -ne 0)
+        {
+            # Autoscale is enabled.
+            $autoscaleEnabledOnContainer = $true;
+        }
+        # Else autoscale is not enabled.
+        else
+        {
+            # Autoscale is disabled.
+            $autoscaleEnabledOnContainer = $false;
+        }
+    }
+    # Else autoscale setting already correct.
+    else
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Autoscale already set to '{3}', skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $autoscaleEnabledOnDatabase);
+    }
+
+    # If throughput value is already correct.
+    if ($throughputValue -eq ($declaredContainerThroughputSetting.Throughput -as [int]))
+    {
+        # Write to log.
+        Write-Log ("[{0}][{1}][{2}] Throughput value is already set to '{3}', skipping" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $throughputValue);
+
+        # Continue to next container.
+        continue;
+    }
+    # Else we need to update the throughput value.
+    else
+    {
+        # Get nearest thousands for throughput.
+        $throughputNearestThounds = [math]::Ceiling($declaredContainerThroughputSetting.Throughput / 1000) * 1000;
+
+        # If throughput value and nearest thousands is not the same.
+        if ($throughputNearestThounds -ne ($declaredContainerThroughputSetting.Throughput -as [int]))
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Throughput value must be specified as whole thousands, changing input value from '{3}' to '{4}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $declaredContainerThroughputSetting.Throughput, $throughputNearestThounds);
+
+            # Update value.
+            $declaredContainerThroughputSetting.Throughput = $throughputNearestThounds;
+        }
+
+        # Try to change throughput.
+        try
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Trying to change throughput to '{3}'" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $declaredContainerThroughputSetting.Throughput);
+        
+            # If autoscale is enabled use max throughput.
+            if ($true -eq $autoscaleEnabledOnDatabase)
+            {
+                # Change throughput.
+                Update-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $cosmosDbContainer.Name -AutoscaleMaxThroughput $declaredContainerThroughputSetting.Throughput  -ErrorAction Stop | Out-Null;
+            }
+            # Else autoscale is not enabled use static throughput.
+            else
+            {
+                # Change throughput.
+                Update-AzCosmosDBSqlContainerThroughput -ResourceGroupName $CosmosDbAccount.ResourceGroupName -AccountName $CosmosDbAccount.Name -DatabaseName $cosmosDbDatabase.Name -Name $cosmosDbContainer.Name -Throughput $declaredContainerThroughputSetting.Throughput -ErrorAction Stop | Out-Null;
+            }
+
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Successfully change throughput to '{3}', scale up can take up to 6 hours" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $throughputNearestThounds);
+        }
+        # Something went wrong changing the throughput.
+        catch
+        {
+            # Write to log.
+            Write-Log ("[{0}][{1}][{2}] Something went wrong change throughput, here is the execption: `r`n{3}" -f $CosmosDbAccount.Name, $cosmosDbDatabase.Name, $cosmosDbContainer.Name, $_);
+        }
     }
 }
 
