@@ -87,7 +87,43 @@ Foreach($Property in $TheObject | Get-Member)
 }
 ```
 
+## Operating System
 
+### Find the operating system
+
+The following get operating system such as Windows, Linux, macOS etc.
+
+```powershell
+# Get operating system.
+function Get-OperatingSystem
+{
+    # If operating system is Windows.
+    if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows))
+    {
+        return "Windows";
+    }
+    # Else if operating system is Linux.
+    elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Linux))
+    {
+        return "Linux";
+    }
+    # Else if operating system is macOS.
+    elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX))
+    {
+        return "macOS";
+    }
+    # Else if operating system is FreeBSD.
+    elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::FreeBSD))
+    {
+        return "FreeBSD";
+    }
+    # Else if operating system is unknown.
+    else
+    {
+        return "Unknown";
+    }
+}
+```
 
 ## Processor
 
