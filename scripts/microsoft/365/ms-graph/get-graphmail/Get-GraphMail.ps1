@@ -55,14 +55,8 @@ $mailboxUserPrincipalName = "<e-mail address>"
 # Get access token.
 $accessToken = Get-GraphAccessToken -ClientId $clientId -ClientSecret $clientSecret -TenantId $tenantId;
 
-# Write to log.
-Write-Information -MessageData "Connecting to Microsoft Graph" -InformationAction Continue;
-
 # Connect to Graph API using token.
 Connect-MgGraph -AccessToken ($accessToken | ConvertTo-SecureString -AsPlainText -Force) -NoWelcome;
-
-# Write to log.
-Write-Information -MessageData ("Getting latest email from mailbox '{0}'" -f $mailboxUserPrincipalName) -InformationAction Continue;
 
 # Get latest (header) message from mailbox.
 $latestMessage.Body = Get-MgUserMessage -UserId $mailboxUserPrincipalName -Top 1;
