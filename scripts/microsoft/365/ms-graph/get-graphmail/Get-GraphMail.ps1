@@ -59,12 +59,22 @@ $accessToken = Get-GraphAccessToken -ClientId $clientId -ClientSecret $clientSec
 Connect-MgGraph -AccessToken ($accessToken | ConvertTo-SecureString -AsPlainText -Force) -NoWelcome;
 
 # Get latest (header) message from mailbox.
-$latestMessage.Body = Get-MgUserMessage -UserId $mailboxUserPrincipalName -Top 1;
+$latestMessage = Get-MgUserMessage -UserId $mailboxUserPrincipalName -Top 1;
 
-# Write to log.
-Write-Information -MessageData ("`r`nLatest e-mail details:") -InformationAction Continue;
-Write-Information -MessageData ("From: {0}" -f $latestMessage.Sender.EmailAddress.Address) -InformationAction Continue;
-Write-Information -MessageData ("To: {0}" -f $latestMessage.ToRecipients.EmailAddress.Address) -InformationAction Continue;
-Write-Information -MessageData ("DateTime: {0}" -f $latestMessage.SentDateTime) -InformationAction Continue;
-Write-Information -MessageData ("Subject: {0}" -f $latestMessage.Subject) -InformationAction Continue;
-Write-Information -MessageData ("Message:`r`n{0}" -f $latestMessage.BodyPreview) -InformationAction Continue;
+# If there is a message.
+if($null -ne $latestMessage)
+{
+    # Write to log.
+    Write-Information -MessageData ("`r`nLatest e-mail details:") -InformationAction Continue;
+    Write-Information -MessageData ("From: {0}" -f $latestMessage.Sender.EmailAddress.Address) -InformationAction Continue;
+    Write-Information -MessageData ("To: {0}" -f $latestMessage.ToRecipients.EmailAddress.Address) -InformationAction Continue;
+    Write-Information -MessageData ("DateTime: {0}" -f $latestMessage.SentDateTime) -InformationAction Continue;
+    Write-Information -MessageData ("Subject: {0}" -f $latestMessage.Subject) -InformationAction Continue;
+    Write-Information -MessageData ("Message:`r`n{0}" -f $latestMessage.BodyPreview) -InformationAction Continue;
+}
+# Else no message.
+else
+{
+    # Write to log.
+    Write-Information -MessageData ("No e-mails in mailbox '{0}'" -f $mailboxUserPrincipalName) -InformationAction Continue;
+}
