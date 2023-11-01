@@ -113,8 +113,7 @@ function Get-AzureSqlDatabaseSize
     param
     (
         [Parameter(Mandatory = $true)][string]$ServerName,
-        [Parameter(Mandatory = $true)][string]$DatabaseName,
-        [Parameter(Mandatory = $false)][ValidateSet("Bytes", "Kilobytes", "Megabytes", "Gigabytes")][string]$SizeUnit = "Gigabytes"
+        [Parameter(Mandatory = $true)][string]$DatabaseName
     )
 
     # Get Azure resource.
