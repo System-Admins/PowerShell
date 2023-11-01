@@ -574,7 +574,7 @@ if ($true -eq $Update)
         catch
         {
             # Write to log.
-            Write-Log ("[{0}][{1}][{2}] Something went wrong updating SKU, execption is:`r`n" -f $databaseToCheck.SubscriptionName, $databaseToCheck.ServerName, $databaseToCheck.DatabaseName, $_);
+            Write-Log ("[{0}][{1}][{2}] Something went wrong updating SKU, execption is:`r`n{3}" -f $databaseToCheck.SubscriptionName, $databaseToCheck.ServerName, $databaseToCheck.DatabaseName, $_);
         }
     }
 }
