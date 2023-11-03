@@ -62,7 +62,7 @@
 #region begin boostrap
 ############### Parameters - Start ###############
 
-[cmdletbinding(DefaultParameterSetName = 'All')]
+[cmdletbinding(DefaultParameterSetName = 'Database')]
 param
 (
     [Parameter(Mandatory = $false)][string]$Location = "westeurope",
@@ -183,7 +183,7 @@ function Get-AzureSqlDatabaseCapabilities
     catch
     {
         # Throw an error.
-        throw ("Unable to get the capabilities of the Azure SQL server, execption is:`r`n" -f $_);
+        throw ("Unable to get the capabilities of the Azure SQL server, execption is:`r`n{0}" -f $_);
     }
 }
 
@@ -218,7 +218,6 @@ function Get-AzureSqlServerSkuStorageSize
             foreach ($supportedServiceLevelObjective in $supportedEdition.supportedServiceLevelObjectives)
             {
                 # Max size.
-                [bigint]$maxSizeValueGigabytes = [int]::MinValue;
                 [bigint]$maxSizeValueMegabytes = [int]::MinValue;
 
                 # Foreach max supported max size.
@@ -234,30 +233,24 @@ function Get-AzureSqlServerSkuStorageSize
                     # If max size unit is megabytes.
                     if ($supportedMaxSize.maxValue.unit -eq "Megabytes")
                     {
-                        # Convert to Gigabytes.
-                        $minValueGigabytes = $supportedMaxSize.maxValue.limit / 1024;
-                        $minValueMegabytes = $supportedMaxSize.maxValue.limit
+                        $maxValueMegabytes = $supportedMaxSize.maxValue.limit
                     }
                     # Else gigabytes.
                     elseif ($supportedMaxSize.maxValue.unit -eq "Gigabytes")
                     {
-                        $minValueGigabytes = $supportedMaxSize.maxValue.limit
-                        $minValueMegabytes = $supportedMaxSize.maxValue.limit * 1024;
+                        $maxValueMegabytes = $supportedMaxSize.maxValue.limit * 1024;
                     }
                     # Else terabytes.
                     elseif ($supportedMaxSize.maxValue.unit -eq "Terabytes")
                     {
-                        # Convert to Gigabytes.
-                        $minValueGigabytes = $supportedMaxSize.maxValue.limit * 1024;
-                        $minValueMegabytes = $supportedMaxSize.maxValue.limit * 1024 * 1024;
+                        $maxValueMegabytes = $supportedMaxSize.maxValue.limit * 1024 * 1024;
                     }
 
                     # If max value is greater than previous.
-                    if ($minValueMegabytes -gt $maxSizeValueMegabytes)
+                    if ($maxValueMegabytes -gt $maxSizeValueMegabytes)
                     {
                         # Update value.
-                        $maxSizeValueGigabytes = $minValueGigabytes;
-                        $maxSizeValueMegabytes = $minValueMegabytes;
+                        $maxSizeValueMegabytes = $maxValueMegabytes;
                     }
                 }
 
@@ -265,7 +258,6 @@ function Get-AzureSqlServerSkuStorageSize
                 if ($supportedServiceLevelObjective.sku.tier -eq "Hyperscale")
                 {
                     # Set to 100TB.
-                    $maxSizeValueGigabytes = 100TB / 1GB;
                     $maxSizeValueMegabytes = 100TB / 1MB;
                 }
 
@@ -280,7 +272,6 @@ function Get-AzureSqlServerSkuStorageSize
                         SkuFamily       = $supportedServiceLevelObjective.sku.family;
                         SkuCapacity     = $supportedServiceLevelObjective.sku.capacity;
                         SkuCapacityUnit = $supportedServiceLevelObjective.performanceLevel.unit;
-                        StorageSizeInGb = $maxSizeValueGigabytes;
                         StorageSizeInMb = $maxSizeValueMegabytes;
                     }
                 }
@@ -507,7 +498,8 @@ foreach ($database in $databases)
             SkuFamily             = $nextDatabaseSku.SkuFamily;
             SkuCapacity           = $nextDatabaseSku.SkuCapacity;
             SkuCapacityUnit       = $nextDatabaseSku.SkuCapacityUnit;
-            SkuMaxStorageSizeInGb = $nextDatabaseSku.StorageSizeInGb;
+            SkuMaxStorageSizeInMb = $nextDatabaseSku.StorageSizeInMb;
+            SkuMaxStorageSizeInGb = $nextDatabaseSku.StorageSizeInMb / 1024;
         };
     }
 }
@@ -523,7 +515,7 @@ if ($databases.Count -eq 0)
 if ($databases.Count -ne 0 -and $databasesToCheck.Count -ne 0)
 {
     # If OutputFilePath is not set.
-    if ($null -ne $OutputFilePath)
+    if (-not ([string]::IsNullOrEmpty($OutputFilePath)))
     {
         # Get folder path.
         $OutputFolderPath = Split-Path -Path $OutputFilePath;
