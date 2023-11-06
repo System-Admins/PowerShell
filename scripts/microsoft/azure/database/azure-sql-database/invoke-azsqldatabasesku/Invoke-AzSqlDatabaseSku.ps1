@@ -38,19 +38,19 @@
 
 .Example
   # Get specific Azure SQL database and check if it's using the correct SKU.
-  .\Untitled-3.ps1 -Location "westeurope" -ServerName "<sqlserver>" -DatabaseName "<sqldatabase>";
+  .\Invoke-AzSqlDatabaseSku.ps1 -Location "westeurope" -ServerName "<sqlserver>" -DatabaseName "<sqldatabase>";
 
 .Example
   # Get all Azure SQL databases and check if it's using the correct SKU.
-  .\Untitled-3.ps1 -Location "westeurope" -All;
+  .\Invoke-AzSqlDatabaseSku.ps1 -Location "westeurope" -All;
 
 .Example
   # Update Azure SQL database SKU based on findings.
-  .\Untitled-3.ps1 -Location "westeurope" -All -Update;
+  .\Invoke-AzSqlDatabaseSku.ps1 -Location "westeurope" -All -Update;
 
 .Example
   # Export findings to a CSV-file.
-  .\Untitled-3.ps1 -Location "westeurope" -All -OutputFilePath "C:\temp\output.csv";
+  .\Invoke-AzSqlDatabaseSku.ps1 -Location "westeurope" -All -OutputFilePath "C:\temp\output.csv";
 
 .NOTES
   Version:        1.0
