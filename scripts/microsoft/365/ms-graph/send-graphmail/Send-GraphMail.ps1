@@ -50,6 +50,7 @@ function Send-GraphMailMessage
         [Parameter(Mandatory = $true)][string]$FromAddress,
         [Parameter(Mandatory = $true)][string]$ToAddress,
         [Parameter(Mandatory = $true)][string]$Subject,
+        [Parameter(Mandatory = $false)][string]$ReplyTo,
         [Parameter(Mandatory = $true)][string]$Message,
         [Parameter(Mandatory = $false)][bool]$SaveToSentItems = $false
     )
@@ -80,7 +81,23 @@ function Send-GraphMailMessage
             );
         };
         "saveToSentItems" = $SaveToSentItems;
-    } | ConvertTo-Json -Depth 6;
+    };
+
+    # If reply to address is specified.
+    if ($null -ne $ReplyTo)
+    {
+        # Add reply to address to body.
+        $body.message.replyTo = @(
+            @{
+                "emailAddress" = @{
+                    "address" = $ReplyTo;
+                };
+            };
+        );
+    }
+    
+    # Convert to JSON.
+    $body = $body | ConvertTo-Json -Depth 6;
 
     # Try to invoke REST method.
     try
@@ -113,6 +130,7 @@ $accessToken = Get-GraphAccessToken -ClientId $clientId -ClientSecret $clientSec
 # Mail details.
 $fromAddress = "from@contoso.com";
 $toAddress = "to@contoso.com";
+$replyTo = "replyToThisEmail@contoso.com";
 $subject = "My Subject";
 $message = "Hello World!";
 
