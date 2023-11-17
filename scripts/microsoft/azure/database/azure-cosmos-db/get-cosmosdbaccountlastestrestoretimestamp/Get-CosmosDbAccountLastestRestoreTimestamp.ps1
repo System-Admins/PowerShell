@@ -125,7 +125,7 @@ foreach ($cosmosDbSqlApiDatabase in $cosmosDbSqlApiDatabases)
             -Name $PSItem.Name;
 
         # Write to log.
-        Write-Host ("[{0}][{1}][{2}] Latest time stamp is '{3}'" -f $Using:azureResource.Name, $Using:cosmosDbSqlApiDatabase.Name, $PSItem.Name, $latestRestoreTimeStamp.LatestRestorableTimestamp);
+        Write-Host ("[{0}][{1}][{2}] Latest time stamp is '{3}'" -f $Using:azureResource.Name, $Using:cosmosDbSqlApiDatabase.Name, $PSItem.Name, $restoreTimeStamp.LatestRestorableTimestamp);
 
         # Create object.
         $containerRestore = New-Object PSObject -Property @{
