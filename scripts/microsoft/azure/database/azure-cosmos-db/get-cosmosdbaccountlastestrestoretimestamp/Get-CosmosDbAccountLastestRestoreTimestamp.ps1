@@ -147,7 +147,7 @@ $restoreTimestamps = $restoreTimestamps | Sort-Object -Property LatestRestoreTim
 $latestRestoreTimestamp = $restoreTimestamps[0];
 
 # Write to log.
-Write-Host ("[{0}] Latest restore timestamp is '{1}' (UTC)" -f $AccountName, $latestRestoreTimestamp.LatestRestoreTimestamp.ToUniversalTime());
+Write-Host ("[{0}] Latest restore timestamp is '{1}' (UTC)" -f $AccountName, $latestRestoreTimestamp.LatestRestoreTimestamp);
 
 # Return timestamp.
 return $latestRestoreTimestamp.LatestRestoreTimestamp.ToUniversalTime();
