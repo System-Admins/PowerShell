@@ -1,4 +1,5 @@
-#Requires -version 7;
+#Requires -Version 7;
+#Requires -Modules Az.CosmosDB, Az.Accounts, Az.Resources;
 
 <#
 .SYNOPSIS
