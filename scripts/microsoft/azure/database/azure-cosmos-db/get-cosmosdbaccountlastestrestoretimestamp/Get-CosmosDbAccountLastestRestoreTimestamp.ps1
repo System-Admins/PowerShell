@@ -141,7 +141,7 @@ foreach ($cosmosDbSqlApiDatabase in $cosmosDbSqlApiDatabases)
 }
 
 # Sort latest restore timestamp.
-$restoreTimestamps = $restoreTimestamps | Sort-Object -Property LatestRestoreTimestamp -Descending;
+$restoreTimestamps = $restoreTimestamps | Sort-Object -Property LatestRestoreTimestamp;
 
 # Get latest restore timestamp.
 $latestRestoreTimestamp = $restoreTimestamps[0];
