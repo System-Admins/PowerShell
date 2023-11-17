@@ -150,7 +150,7 @@ $latestRestoreTimestamp = $restoreTimestamps[0];
 Write-Host ("[{0}] Latest restore timestamp is '{1}' (UTC)" -f $AccountName, $latestRestoreTimestamp.LatestRestoreTimestamp);
 
 # Return timestamp.
-return $latestRestoreTimestamp.LatestRestoreTimestamp.ToUniversalTime();
+return $latestRestoreTimestamp.LatestRestoreTimestamp;
 
 ############### Main - End ###############
 #endregion
