@@ -1,7 +1,8 @@
 # Variables.
-$adminUrl = '';
-$username = '';
-$password = '';
+$adminUrl = 'https://contoso-admin.sharepoint.com'; # Url to the SharePoint admin center.
+$username = ''; # Username for the SharePoint Administrator (MFA not supported).
+$password = ''; # Password for the SharePoint Administrator.
+$reset = $false; # If the script should reset the unqiue permissions on the files.
 
 # Import the module.
 Import-Module -Name 'Pnp.PowerShell' -DisableNameChecking -Force;
@@ -22,6 +23,9 @@ $siteCollections = Get-PnPTenantSite | Where-Object { $_.Template -notin @(
         'SRCHCEN#0'
     )
 };
+
+# Files with unique permissions.
+$files = @();
 
 # Foreach site collection.
 foreach ($siteCollection in $siteCollections)
@@ -59,6 +63,16 @@ foreach ($siteCollection in $siteCollections)
 
                 # If the list item dont have unique permissions.
                 if ($hasUniquePermissions -eq $false)
+                {
+                    # Continue to the next list item.
+                    continue;
+                }
+
+                # Add to files.
+                $files += $listItem.FieldValues.FileRef;
+
+                # If file should not have unique permissions reset.
+                if($false -eq $reset)
                 {
                     # Continue to the next list item.
                     continue;
