@@ -103,3 +103,6 @@ foreach ($siteCollection in $siteCollections)
         }
     }
 }
+
+# Return files.
+return files;
