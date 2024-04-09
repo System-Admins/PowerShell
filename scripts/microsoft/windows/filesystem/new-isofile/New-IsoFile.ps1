@@ -30,7 +30,7 @@
 
 .EXAMPLE
   # Create an ISO file from the folder 'C:\Temp\MyFolder' to 'C:\AnotherTemp\MyFolder.iso'.
-  Create-Iso -SourcePath 'C:\Temp\MyFolder' -DestinationPath 'C:\AnotherTemp\MyFolder.iso';
+  New-IsoFile -SourcePath 'C:\Temp\MyFolder' -DestinationPath 'C:\AnotherTemp\MyFolder.iso';
 
 .NOTES
   Version:        1.0
