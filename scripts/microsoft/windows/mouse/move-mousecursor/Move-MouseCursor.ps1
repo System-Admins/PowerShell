@@ -59,6 +59,16 @@ param
 #region begin bootstrap
 ############### Bootstrap - Start ###############
 
+# Write to log.
+Write-Verbose -Message ('Starting processing {0}' -f $MyInvocation.MyCommand.Name);
+
+# If operating system is not Windows.
+if (-not ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)))
+{
+    # Throw exception.
+    throw 'This script only works on Windows operating systems';
+}
+
 # Add assembly for Windows Forms.
 Add-Type -AssemblyName System.Windows.Forms;
 
@@ -149,6 +159,9 @@ while ($true -eq $isInTimeRange -or $NoLimit -eq $true)
 
 #region begin finalize
 ############### Finalize - Start ###############
+
+# Write to log.
+Write-Verbose -Message ('Ending processing {0}' -f $MyInvocation.MyCommand.Name);
 
 ############### Finalize - End ###############
 #endregion
