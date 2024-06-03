@@ -6,6 +6,7 @@
 
 .DESCRIPTION
   Search for all DNS records in the domain and export them to a CSV file.
+  The machine where the script should run, should be joined to an Active Directory domain.
 
 .Parameter OutputFilePath
   (Optional) Path to output file. Default will create a CSV on the user desktop.
