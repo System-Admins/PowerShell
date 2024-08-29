@@ -290,12 +290,22 @@ foreach ($domainUser in $domainUsers)
         }
     }
 
-    # If last logon is DateTime.MinValue.
+    # If last logon is empty.
     if ([string]::IsNullOrEmpty($domainUser.LastLogon))
     {
         # Write to log.
         Write-Log ('[{0}] User never logged on' -f $domainUser.sAMAccountName);
 
+        # Set last logon to never.
+        $domainUser.LastLogon = 'Never';
+    }
+    # Else if the last logon is DateTime.Min.
+    elseif(($domainUser.LastLogon).Year -eq '1601')
+    {
+        # Write to log.
+        Write-Log ('[{0}] User never logged on' -f $domainUser.sAMAccountName);
+
+        # Set last logon to never.
         $domainUser.LastLogon = 'Never';
     }
 
