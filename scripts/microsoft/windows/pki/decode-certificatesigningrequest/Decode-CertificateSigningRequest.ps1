@@ -24,8 +24,8 @@
 
 .NOTES
   Version:        1.0
-  Author:         Alex Hansen (zorh@novonordisk.com)
-  Creation Date:  05-09-2024
+  Author:         Alex Hansen (ath@systemadmins.com)
+  Creation Date:  06-09-2024
   Purpose/Change: Initial script development.
 #>
 
