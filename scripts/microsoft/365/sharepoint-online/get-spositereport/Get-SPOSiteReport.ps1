@@ -5,7 +5,7 @@
 $spoAdminUrl = 'https://contoso-admin.sharepoint.com';
 $tenantId = '<Entra tenant ID>';
 $pnpOnlineApplicationName = ('PnpOnline_{0}' -f (Get-Random));
-$exportFilePath = ('{0}\rgs_sharepointReport.csv' -f [Environment]::GetFolderPath('Desktop'));
+$exportFilePath = ('{0}\sharepointReport.csv' -f [Environment]::GetFolderPath('Desktop'));
 
 # Register the PnP Online as an application in Entra.
 $entraIdApp = Register-PnPEntraIDAppForInteractiveLogin `
