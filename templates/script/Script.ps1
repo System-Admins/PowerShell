@@ -1,4 +1,4 @@
-#Requires -version 5.1;
+#Requires -Version 5.1;
 
 <#
 .SYNOPSIS
@@ -7,11 +7,11 @@
 .DESCRIPTION
   .
 
-.Parameter MyParameter
+.PARAMETER MyParameter
   This parameter is an example.
 
-.Example
-   .\Script.ps1 -Parameter MyParameter;
+.EXAMPLE
+   .\Script.ps1 -MyParameter SomeValue;
 
 .NOTES
   Version:        1.0
@@ -24,8 +24,7 @@
 ############### Parameters - Start ###############
 
 [cmdletbinding()]
-
-Param
+param
 (
 )
 
