@@ -1,4 +1,4 @@
-#Requires -Version 7.4;
+#Requires -Version 7.4.4;
 #Requires -Modules PnP.PowerShell;
 
 <#
