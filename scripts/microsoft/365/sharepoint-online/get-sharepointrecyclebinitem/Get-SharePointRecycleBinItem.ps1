@@ -110,7 +110,6 @@ $entraIdApp = Register-PnPEntraIDAppForInteractiveLogin `
   -Tenant $TenantId `
   -ApplicationName $pnpOnlineApplicationName `
   -SharePointDelegatePermissions 'AllSites.FullControl'`
-  -Interactive `
   -WarningAction SilentlyContinue `
   -ErrorAction Stop;
 
@@ -157,8 +156,23 @@ $sites = Get-PnPTenantSite `
 $results = @();
 
 # Foreach site.
-foreach ($site in $sites[-1])
+foreach ($site in $sites)
 {
+  # Clear variables.
+  $pnpSiteConnection = $null;
+  $recycleBinItems = $null;
+  $result = $null;
+
+  # If the site template is redirect.
+  if ($site.Template -in 'RedirectSite#0', 'EHS#1', 'SRCHCEN#0', 'APPCATALOG#0', 'POINTPUBLISHINGTOPIC#0', 'POINTPUBLISHINGHUB#0')
+  {
+    # Write to log.
+    Write-Information -MessageData ("[{0}] Skipping site, because of template type '{1}'" -f $site.Url, $site.Template) -InformationAction Continue;
+
+    # Continue to next site. 
+    continue; 
+  }
+
   # If the URL is specified.
   if ($Url.Count -gt 0)
   {
@@ -174,14 +188,27 @@ foreach ($site in $sites[-1])
   [string]$sharePointTenantUrl = ($site.Url -split '\/sites')[0];
 
   # Write to log.
-  Write-Information -MessageData ("[{0}] Adding '{1}' as site collection administrator" -f $site.Url, $currentUser.Email) -InformationAction Continue;
+  Write-Information -MessageData ("[{0}] Adding '{1}' as site collection administrator" -f $site.Url, $currentUser.UserPrincipalName) -InformationAction Continue;
 
-  # Add the current user as a site collection administrator.
-  $null = Set-PnPTenantSite `
-    -Identity $site.Url `
-    -Owners $currentUser.UserPrincipalName `
-    -Connection $pnpConnection `
-    -WarningAction SilentlyContinue;
+  # Try to add current user as a site collection administrator.
+  try
+  {
+    $null = Set-PnPTenantSite `
+      -Identity $site.Url `
+      -Owners $currentUser.UserPrincipalName `
+      -Connection $pnpConnection `
+      -WarningAction SilentlyContinue `
+      -ErrorAction Stop;
+  }
+  # Something went wrong.
+  catch
+  {
+    # Write to log.
+    Write-Information -MessageData ("[{0}] Something went wrong while adding '{1}' as site collection administrator, skipping site" -f $site.Url, $currentUser.UserPrincipalName) -InformationAction Continue;
+
+    # Continue to next site.
+    continue;
+  }
 
   # Connect to the site.
   $pnpSiteConnection = Connect-PnPOnline `
@@ -226,7 +253,7 @@ foreach ($site in $sites[-1])
   }
 
   # Write to log.
-  Write-Information -MessageData ("[{0}] Removing '{1}' as site collection administrator" -f $site.Url, $currentUser.Email) -InformationAction Continue;
+  Write-Information -MessageData ("[{0}] Removing '{1}' as site collection administrator" -f $site.Url, $currentUser.UserPrincipalName) -InformationAction Continue;
 
   # Remove the current user as a site collection administrator.
   Remove-PnPSiteCollectionAdmin `
