@@ -197,6 +197,7 @@ foreach ($exoMailbox in $exoMailboxes)
 }
 
 # Write to log.
+Write-Information -MessageData ("Total recoverable item(s) for mailbox(es) is {0}" -f $results.Count) -InformationAction Continue;
 Write-Information -MessageData ("Exporting results to '{0}'" -f $ExportFilePath) -InformationAction Continue;
 
 # Export results to CSV.
