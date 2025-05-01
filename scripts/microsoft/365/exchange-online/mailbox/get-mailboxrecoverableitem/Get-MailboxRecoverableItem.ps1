@@ -1,4 +1,5 @@
 #Requires -Version 5.1;
+#Requires -Modules ExchangeOnlineManagement;
 
 <#
 .SYNOPSIS
@@ -148,13 +149,15 @@ foreach ($exoMailbox in $exoMailboxes)
   $recoveryItems = @();
 
   # Get recovery items for the mailbox (DeletedItems, RecoverableItems and PurgedItems).
-  $recoveryItems += $exoMailbox | Get-RecoverableItems `
+  $recoveryItems += Get-RecoverableItems `
+    -Identity $exoMailbox.Guid `
     -ResultSize Unlimited `
     -FilterStartTime $filterStartTime `
     -FilterEndTime $filterEndTime;
 
   # Get recovery items for the mailbox (DiscoveryHoldsItems).
-  $recoveryItems += $exoMailbox | Get-RecoverableItems `
+  $recoveryItems += Get-RecoverableItems `
+    -Identity $exoMailbox.Guid `
     -ResultSize Unlimited `
     -FilterStartTime $filterStartTime `
     -FilterEndTime $filterEndTime `
@@ -186,7 +189,6 @@ foreach ($exoMailbox in $exoMailboxes)
       PolicyTag                    = $recoveryItem.PolicyTag;
       SourceFolder                 = $recoveryItem.SourceFolder;
       LastModifiedTime             = $recoveryItem.LastModifiedTime;
-
     };
 
     # Add to results.
@@ -195,6 +197,7 @@ foreach ($exoMailbox in $exoMailboxes)
 }
 
 # Write to log.
+Write-Information -MessageData ("Total recoverable item(s) for mailbox(es) is {0}" -f $results.Count) -InformationAction Continue;
 Write-Information -MessageData ("Exporting results to '{0}'" -f $ExportFilePath) -InformationAction Continue;
 
 # Export results to CSV.
