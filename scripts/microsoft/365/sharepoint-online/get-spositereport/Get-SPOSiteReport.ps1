@@ -1,109 +1,277 @@
-#Requires -Module 'PnP.PowerShell';
+#Requires -Module Microsoft.Graph.Reports, Microsoft.Graph.Identity.DirectoryManagement;
 #Requires -Version 7.4.4;
 
-# Variables.
-$spoAdminUrl = 'https://contoso-admin.sharepoint.com';
-$tenantId = '<Entra tenant ID>';
+<#
+.SYNOPSIS
+    Generate Microsoft SharePoint report.
+
+.DESCRIPTION
+    This script generates a report for Microsoft SharePoint Online sites in the tenant.
+    It retrieves activity data from Microsoft Graph and connects to SharePoint Online using PnP PowerShell.
+    The report includes information about each site, such as URL, title, owner, template, status, and activity data.
+
+.PARAMETER ExportFilePath
+    The file path to export the results to.
+    Default is the desktop with a timestamp.
+
+.EXAMPLE
+    .\Get-SharePointOnlineReport.ps1;
+
+.EXAMPLE
+    .\Get-SharePointOnlineReport -ExportFilePath 'C:\Temp\MicrosoftTeamsReport.csv';
+
+.NOTES
+    Version:        1.0
+    Author:         Alex Hansen (ath@systemadmins.com)
+    Creation Date:  02-05-2025
+    Purpose/Change: Initial script development.
+#>
+
+#region begin boostrap
+############### Parameters - Start ###############
+
+[cmdletbinding()]
+param
+(
+    # Export file path for results.
+    [Parameter(Mandatory = $false, Position = 5)]
+    [string]$ExportFilePath = ('{0}\SharePointOnline-Report-{1:yyyyMMdd-HHmmss}.csv' -f ([Environment]::GetFolderPath('Desktop')), (Get-Date))
+)
+
+############### Parameters - End ###############
+#endregion
+
+#region begin bootstrap
+############### Bootstrap - Start ###############
+
+# Check if Pnp.PowerShell module is installed.
+if (-not (Get-Module -Name PnP.PowerShell -ListAvailable))
+{
+    # Throw exeption.
+    throw ('PnP PowerShell module is not installed');
+}
+
+# Import modules.
+Import-Module `
+    -Name Microsoft.Graph.Reports, Microsoft.Graph.Identity.DirectoryManagement `
+    -DisableNameChecking `
+    -Force `
+    -ErrorAction Stop `
+    -WarningAction SilentlyContinue;
+
+# Write to log.
+Write-Information -MessageData ('Script started - {0}' -f (Get-Date)) -InformationAction Continue;
+
+############### Bootstrap - End ###############
+#endregion
+
+#region begin variables
+############### Variables - Start ###############
+
+# PnP Online application name.
 $pnpOnlineApplicationName = ('PnpOnline_{0}' -f (Get-Random));
-$exportFilePath = ('{0}\sharepointReport.csv' -f [Environment]::GetFolderPath('Desktop'));
+
+############### Variables - End ###############
+#endregion
+
+#region begin functions
+############### Functions - Start ###############
+
+############### Functions - End ###############
+#endregion
+
+#region begin main
+############### Main - Start ###############
+
+# Write to log.
+Write-Information -MessageData ('Connecting to Microsoft Graph') -InformationAction Continue;
+
+# Disconnect from Microsoft Graph.
+$null = Disconnect-MgGraph -ErrorAction SilentlyContinue;
+
+# Connect to Microsoft Graph.
+$null = Connect-MgGraph `
+    -Scopes @('Reports.Read.All', 'Sites.Read.All', 'User.Read.All') `
+    -ErrorAction Stop `
+    -NoWelcome;
+
+# Write to log.
+Write-Information -MessageData ('Getting all activity data for the SharePoint Online in the tenant') -InformationAction Continue;
+
+# Temporary file path to store the activity data.
+$spoActivityFilePath = ('{0}\{1}_spoActivity.csv' -f $env:temp, (New-Guid).Guid);
+
+# Get all activity data for the SharePoint Online in the tenant.
+$null = Get-MgReportSharePointSiteUsageDetail -Period 'D90' -OutFile $spoActivityFilePath;
+
+# Import the activity data from the temporary files.
+$spoActivityDetails = Import-Csv -Path $spoActivityFilePath -Delimiter ',' -Encoding utf8 -ErrorAction Stop;
+
+# Get tenant id.
+$organization = Get-MgOrganization;
+
+# Import the PnP PowerShell module (https://github.com/microsoftgraph/msgraph-sdk-powershell/issues/2285).
+Import-Module `
+    -Name PnP.PowerShell `
+    -DisableNameChecking `
+    -Force `
+    -ErrorAction Stop `
+    -WarningAction SilentlyContinue;
+
+# Write to log.
+Write-Information -MessageData ('Trying to register app in Entra ID for PnP Online') -InformationAction Continue;
+Write-Information -MessageData ('Please login with a global admin account, the login prompt may be hidden') -InformationAction Continue;
+Write-Information -MessageData ('Login prompt will appear twice, and a consent is needed for the application') -InformationAction Continue;
 
 # Register the PnP Online as an application in Entra.
 $entraIdApp = Register-PnPEntraIDAppForInteractiveLogin `
-    -Tenant $tenantId `
+    -Tenant $organization.Id `
     -ApplicationName $pnpOnlineApplicationName `
-    -SharePointDelegatePermissions 'AllSites.FullControl' `
-    -Interactive `
+    -SharePointDelegatePermissions 'AllSites.FullControl'`
     -WarningAction SilentlyContinue `
     -ErrorAction Stop;
 
 # Get the application ID.
-$applicationId = $entraIdApp.'AzureAppId/ClientId';
+$pnpApplicationId = $entraIdApp.'AzureAppId/ClientId';
 
-# If the application ID is not null, then we can proceed.
-if ($null -eq $applicationId)
+# If the Pnp.PowerShell application ID is null.
+if ($null -eq $pnpApplicationId)
 {
-    # Write to log and exit.
-    Write-Warning ('Unable to register the PnP Online application in Entra');
-
     # Throw an error.
     throw ('Unable to register the PnP Online application in Entra, aborting script');
 }
 
-# Connect to SharePoint Online.
+# Get the tenant SharePoint Online site URL.
+$spoSiteRoot = Invoke-MgGraphRequest -Uri 'https://graph.microsoft.com/v1.0/sites/root' -Method GET -OutputType PSObject;
+
+# Add -admin before .sharepoint.com to get the admin site URL.
+$spoAdminUrl = $spoSiteRoot.webUrl -replace '\.sharepoint\.com', '-admin.sharepoint.com';
+
+# Connect to SharePoint Online using PnP PowerShell.
 $pnpConnection = Connect-PnPOnline `
     -Url $spoAdminUrl `
-    -ReturnConnection `
+    -ClientId $pnpApplicationId `
+    -Tenant $organization.Id `
     -Interactive `
-    -ApplicationId $applicationId `
-    -WarningAction SilentlyContinue;
+    -ReturnConnection `
+    -ErrorAction Stop;
 
-# Get all sites in the tenant.
-$sites = Get-PnPTenantSite `
+# Write to log.
+Write-Information -MessageData ('Getting all SharePoint Online sites in the tenant') -InformationAction Continue;
+
+# Get all SharePoint Online sites in the tenant.
+$spoSites = Get-PnPTenantSite `
     -Connection $pnpConnection `
     -Detailed `
-    -WarningAction SilentlyContinue;
+    -ErrorAction Stop;
 
-# Results object.
+# Result object.
 $results = @();
 
-# Foreach site.
-foreach ($site in $sites)
+# Write to log.
+Write-Information -MessageData ('Enumerating all SharePoint sites in the tenant') -InformationAction Continue;
+
+# Forach SharePoint site.
+foreach ($spoSite in $spoSites)
 {
-    # Create a new object to store the site information.
+    # Write to log.
+    Write-Information -MessageData ('[+] Site: {0}' -f $spoSite.Url) -InformationAction Continue;
+
+    # Create a new object.
     $result = [PSCustomObject]@{
-        Title                        = $site.Title;
-        Url                          = $site.Url;
-        Owner                        = $site.OwnerEmail;
-        StorageMB                    = $site.StorageUsageCurrent;
-        Template                     = $site.Template;
-        IsTeamsConnected             = $site.IsTeamsConnected;
-        IsTeamsChannelConnected      = $site.IsTeamsChannelConnected;
-        IsHubSite                    = $site.IsHubSite;
-        IsMicrosoft365GroupConnected = $false;
-        TeamsChannelType             = $site.TeamsChannelType;
-        SharingCapability            = $site.SharingCapability;
-        GroupId                      = $site.GroupId;
-        NumberOfSubsites             = $site.WebsCount;
-        LockState                    = $site.LockState;
+        Id                      = $spoSite.SiteId.Guid;
+        Url                     = $spoSite.Url;
+        Title                   = $spoSite.Title;
+        Owner                   = '';
+        Template                = $spoSite.Template;
+        Status                  = $spoSite.Status;
+        ArchiveStatus           = $spoSite.ArchiveStatus;
+        SubsiteCount            = $spoSite.WebsCount;
+        IsHubSite               = $spoSite.IsHubSite;
+        IsTeamsChannelConnected = $spoSite.IsTeamsChannelConnected;
+        IsTeamsConnected        = $spoSite.IsTeamsConnected;
+        IsUsedInTeams           = $false;
+        IsConnectedToM365Group  = $false;
+        TeamsChannelType        = $spoSite.TeamsChannelType;
+        GroupId                 = $spoSite.GroupId.Guid;
+        InformationBarrierMode  = $spoSite.InformationBarrierMode;
+        LastActivityDate        = [datetime]::MinValue;
+        FileCount               = 0;
+        ActiveFileCount         = 0;
+        VisitedPageCount        = 0;
+        PageViewCount           = 0;
+        StorageUsedinGB         = 0;
+        StorageUsedinMB         = 0;
     };
 
-    # If the site is connected to a Microsoft 365 group.
-    if (
-        $null -ne $site.GroupId -and
-        $site.GroupId -ne '00000000-0000-0000-0000-000000000000')
+    # If either IsTeamsChannelConnected or IsTeamsConnected is true.
+    if ($spoSite.IsTeamsChannelConnected -or $spoSite.IsTeamsConnected)
     {
-        # Set group connected to true.
-        $result.IsMicrosoft365GroupConnected = $true;
+        # Set IsUsedInTeams to true.
+        $result.IsUsedInTeams = $true;
     }
 
-    # Add to results.
+    # If the site is connected to a Microsoft 365 group.
+    if ($spoSite.GroupId -ne [Guid]::Empty -or $spoSite.RelatedGroupId -ne [Guid]::Empty)
+    {
+        # Set IsConnectedToM365Group to true.
+        $result.IsConnectedToM365Group = $true;
+    }
+
+    # Match the site with the activity data.
+    $spoActivityDetail = $spoActivityDetails | Where-Object { $_.'Site Id' -eq $spoSite.SiteId };
+
+    # Update the result object with the activity data.
+    $result.FileCount = $spoActivityDetail.'File Count';
+    $result.ActiveFileCount = $spoActivityDetail.'Active File Count';
+    $result.PageViewCount = $spoActivityDetail.'Page View Count';
+    $result.VisitedPageCount = $spoActivityDetail.'Visited Page Count';
+    $result.StorageUsedinGB = [math]::Round($spoActivityDetail.'Storage Used (Byte)' / 1GB, 0);
+    $result.StorageUsedinMB = [math]::Round($spoActivityDetail.'Storage Used (Byte)' / 1MB, 0);
+    $result.Owner = $spoActivityDetail.'Owner Principal Name';
+
+    # If the activity data is not null.
+    if (-not [string]::IsNullOrEmpty($spoActivityDetail.'Last Activity Date'))
+    {
+        # Convert to datetime.
+        $result.LastActivityDate = [datetime]::ParseExact($spoActivityDetail.'Last Activity Date', 'yyyy-MM-dd', $null);
+    }
+    # If the activity data is null.
+    else
+    {
+        # Convert to datetime.
+        $result.LastActivityDate = [datetime]::MinValue;
+    }
+
+    # Add the result to the results array.
     $results += $result;
 }
 
-# Count expressions.
-$teamsConnected = $results | Where-Object { $_.IsTeamsConnected -eq $true };
-$teamsChannelConnected = $results | Where-Object { $_.IsTeamsChannelConnected -eq $true };
-$m365GroupConnected = $results | Where-Object { $_.IsMicrosoft365GroupConnected -eq $true };
-$totalUsedStorageInMB = ($results | Measure-Object -Property StorageMB -Sum).Sum;
-$totalUsedStorageInGB = [math]::Round(($totalUsedStorageInMB / 1024), 0);
-$totalUsedStorageInTB = [math]::Round(($totalUsedStorageInMB / 1024 / 1024), 2);
-$numberOfHubSites = $results | Where-Object { $_.IsHubSite -eq $true };
+# Write to log.
+Write-Information -MessageData ('Disconnecting from Sharepoint Online') -InformationAction Continue;
+
+# Disconnect from SharePoint Online.
+$pnpConnection = $null;
 
 # Write to log.
-Write-Information -MessageData ('Number of sites: {0}' -f $results.Count) -InformationAction Continue;
-Write-Information -MessageData ('Number of sites that is Microsoft Teams connected: {0}' -f $teamsConnected.Count) -InformationAction Continue;
-Write-Information -MessageData ('Number of sites that is Microsoft Teams Channel connected: {0}' -f $teamsChannelConnected.Count) -InformationAction Continue;
-Write-Information -MessageData ('Number of sites that is Microsoft 365 group connected: {0}' -f $m365GroupConnected.Count) -InformationAction Continue;
-Write-Information -MessageData ('Number of sites that is a hub site: {0}' -f $numberOfHubSites.Count) -InformationAction Continue;
-Write-Information -MessageData ('Total used spaces across all sites: {0} MB / {1} GB / {2} TB' -f $totalUsedStorageInMB, $totalUsedStorageInGB, $totalUsedStorageInTB) -InformationAction Continue;
-Write-Information -MessageData ('') -InformationAction Continue;
-Write-Information -MessageData ("Exporting result to '{0}'" -f $exportFilePath) -InformationAction Continue;
+Write-Information -MessageData ("Exporting results to '{0}'" -f $ExportFilePath) -InformationAction Continue;
 
-# Export to CSV.
+# Export results to CSV.
 $null = $results | Export-Csv `
-    -Path $exportFilePath `
+    -Path $ExportFilePath `
     -NoTypeInformation `
-    -Delimiter ';' `
-    -UseQuotes Always `
     -Force `
     -Encoding UTF8;
+
+############### Main - End ###############
+#endregion
+
+#region begin finalize
+############### Finalize - Start ###############
+
+# Write to log.
+Write-Information -MessageData ("Remember to remove the Entra ID application with ID '{1}' called '{1}'" -f $applicationId, $pnpOnlineApplicationName) -InformationAction Continue;
+Write-Information -MessageData ('Script finished - {0}' -f (Get-Date)) -InformationAction Continue;
+
+############### Finalize - End ###############
+#endregion
