@@ -156,6 +156,12 @@ $pnpConnection = Connect-PnPOnline `
     -ReturnConnection `
     -ErrorAction Stop;
 
+# Get current user.
+$ctx = Get-PnPContext -Connection $pnpConnection;
+$ctx.Load($ctx.Web.CurrentUser);
+$ctx.ExecuteQuery();
+$currentUser = $ctx.Web.CurrentUser;
+
 # Write to log.
 Write-Information -MessageData ('Getting all SharePoint Online sites in the tenant') -InformationAction Continue;
 
@@ -164,6 +170,11 @@ $spoSites = Get-PnPTenantSite `
     -Connection $pnpConnection `
     -Detailed `
     -ErrorAction Stop;
+
+# Get the site collection web application.
+$spoWebApp = Get-PnPWeb `
+    -Connection $pnpConnection `
+    -Includes 'RegionalSettings.InstalledLanguages';
 
 # Result object.
 $results = @();
@@ -174,6 +185,13 @@ Write-Information -MessageData ('Enumerating all SharePoint sites in the tenant'
 # Forach SharePoint site.
 foreach ($spoSite in $spoSites)
 {
+    # If the site template is redirect.
+    if ($spoSite.Template -in 'RedirectSite#0', 'EHS#1', 'SRCHCEN#0', 'APPCATALOG#0', 'POINTPUBLISHINGTOPIC#0', 'POINTPUBLISHINGHUB#0')
+    {
+        # Continue to next site. 
+        continue; 
+    }
+
     # Write to log.
     Write-Information -MessageData ('[+] Site: {0}' -f $spoSite.Url) -InformationAction Continue;
 
@@ -184,6 +202,11 @@ foreach ($spoSite in $spoSites)
         Title                   = $spoSite.Title;
         Owner                   = '';
         Template                = $spoSite.Template;
+        LocaleId                = $spoSite.LocaleId;
+        LanguageName            = '';
+        LanguageTag             = '';
+        TimeZoneId              = '';
+        TimeZoneDescription     = '';
         Status                  = $spoSite.Status;
         ArchiveStatus           = $spoSite.ArchiveStatus;
         SubsiteCount            = $spoSite.WebsCount;
@@ -243,15 +266,55 @@ foreach ($spoSite in $spoSites)
         $result.LastActivityDate = [datetime]::MinValue;
     }
 
+    # Get language.
+    $language = ($spoWebApp.RegionalSettings.InstalledLanguages | Where-Object { $_.LCID -eq $spoSite.LocaleId });
+
+    # Update result object with language data.
+    $result.LanguageName = $language.DisplayName;
+    $result.LanguageTag = $language.LanguageTag;
+
+    # Add current user as a site collection administrator.
+    $null = Set-PnPTenantSite `
+        -Identity $spoSite.Url `
+        -Owners $currentUser.UserPrincipalName `
+        -Connection $pnpConnection `
+        -WarningAction SilentlyContinue `
+        -ErrorAction SilentlyContinue;
+
+    # Connect to the site.
+    $pnpSiteConnection = Connect-PnPOnline `
+        -Url $spoSite.Url `
+        -Connection $pnpConnection `
+        -Interactive `
+        -ClientId $pnpConnection.ClientId `
+        -ReturnConnection `
+        -WarningAction SilentlyContinue;
+
+    # Get the site collection web application for the site.
+    $spoWebAppSite = Get-PnPWeb `
+        -Connection $pnpSiteConnection `
+        -Includes @('RegionalSettings', 'RegionalSettings.TimeZone');
+
+    # Update result object with time zone data.
+    $result.TimeZoneId = $spoWebAppSite.RegionalSettings.TimeZone.Id;
+    $result.TimeZoneDescription = $spoWebAppSite.RegionalSettings.TimeZone.Description;
+
     # Add the result to the results array.
     $results += $result;
+
+    # Remove the current user as a site collection administrator.
+    Remove-PnPSiteCollectionAdmin `
+        -Owners $currentUser.UserPrincipalName `
+        -Connection $pnpSiteConnection `
+        -WarningAction SilentlyContinue `
+        -ErrorAction SilentlyContinue;
 }
 
 # Write to log.
 Write-Information -MessageData ('Disconnecting from Sharepoint Online') -InformationAction Continue;
 
 # Disconnect from SharePoint Online.
-$pnpConnection = $null;
+$pnpConnection, $pnpSiteConnection = $null;
 
 # Write to log.
 Write-Information -MessageData ("Exporting results to '{0}'" -f $ExportFilePath) -InformationAction Continue;
