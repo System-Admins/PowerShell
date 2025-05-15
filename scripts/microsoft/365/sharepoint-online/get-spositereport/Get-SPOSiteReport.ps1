@@ -313,8 +313,9 @@ foreach ($spoSite in $spoSites)
 # Write to log.
 Write-Information -MessageData ('Disconnecting from Sharepoint Online') -InformationAction Continue;
 
-# Disconnect from SharePoint Online.
+# Disconnect from SharePoint Online and Graph.
 $pnpConnection, $pnpSiteConnection = $null;
+$null = Disconnect-MgGraph -ErrorAction SilentlyContinue;
 
 # Write to log.
 Write-Information -MessageData ("Exporting results to '{0}'" -f $ExportFilePath) -InformationAction Continue;
