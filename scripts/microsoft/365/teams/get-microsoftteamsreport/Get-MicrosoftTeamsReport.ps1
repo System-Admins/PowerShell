@@ -220,6 +220,7 @@ foreach ($msTeam in $msTeams)
         SharePointLastActivityDate = $null;
         SharePointPageViewCount    = $null;
         SharePointTemplate         = $null;
+        SharePointLocaleId         = '';
     };
 
     # Match the Microsoft Team with the activity data.
@@ -259,6 +260,7 @@ foreach ($msTeam in $msTeams)
         $result.SharePointStorageUsageGB = $spoActivityDetail.'Storage Used (Byte)' / 1GB;
         $result.SharePointPageViewCount = $spoActivityDetail.'Page View Count';
         $result.SharePointTemplate = $spoActivityDetail.'Root Web Template';
+        $result.SharePointLocaleId = $spoSite.LocaleId;
 
         # If last activity date is not empty.
         if (-not [string]::IsNullOrEmpty($spoActivityDetail.'Last Activity Date') )
