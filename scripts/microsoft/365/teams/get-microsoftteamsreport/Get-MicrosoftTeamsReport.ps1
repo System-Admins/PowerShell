@@ -220,6 +220,10 @@ foreach ($msTeam in $msTeams)
         SharePointLastActivityDate = $null;
         SharePointPageViewCount    = $null;
         SharePointTemplate         = $null;
+        SharePointLanguageName            = '';
+        SharePointLanguageTag             = '';
+        SharePointTimeZoneId              = '';
+        SharePointTimeZoneDescription     = '';
     };
 
     # Match the Microsoft Team with the activity data.
